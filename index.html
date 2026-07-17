@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Piano Notenblatt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;1,9..40,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/vexflow@4.2.0/build/cjs/vexflow.js"></script>
+</head>
+<body>
+
+<header class="main-header">
+  <h1>Piano Notenblatt</h1>
+  <p class="tagline">88 Tasten &mdash; Zwei Haende &mdash; Klassisches Grand Staff</p>
+</header>
+
+<main>
+
+<section class="keyboard-section" aria-label="Klaviatur">
+  <div class="keyboard-header">
+    <span class="keyboard-range">A0 (Taste 1) &mdash; C8 (Taste 88)</span>
+  </div>
+  <div class="keyboard-scroll" id="keyboardScroll">
+    <div id="keyboard" class="keyboard"></div>
+  </div>
+</section>
+
+<section class="input-section" aria-label="Eingabe">
+  <div class="hand-tabs">
+    <button class="hand-btn active" data-hand="right" onclick="switchHand('right')">Rechte Hand &mdash; Violinschluessel</button>
+    <button class="hand-btn" data-hand="left" onclick="switchHand('left')">Linke Hand &mdash; Bassschluessel</button>
+  </div>
+
+  <div class="duration-bar">
+    <label for="durationSelect">Notenlaenge:</label>
+    <select id="durationSelect">
+      <option value="w">Ganze Note</option>
+      <option value="h">Halbe Note</option>
+      <option value="q" selected>Viertelnote</option>
+      <option value="8">Achtelnote</option>
+      <option value="16">Sechzehntelnote</option>
+    </select>
+    <label class="dot-check"><input type="checkbox" id="dottedCheck"> Punktiert</label>
+    <button onclick="addNote()" class="btn-add">Note / Akkord hinzufuegen</button>
+    <button onclick="addRest()" class="btn-add btn-secondary">Pause einfuegen</button>
+    <button onclick="undoLast()" class="btn-secondary">Letztes entfernen</button>
+    <button onclick="clearHand()" class="btn-danger">Spur leeren</button>
+  </div>
+
+  <div class="sequence-box">
+    <h3>Sequenz &mdash; <span id="currentHandLabel">Rechte Hand</span></h3>
+    <div id="sequenceList" class="sequence-chips"></div>
+  </div>
+</section>
+
+<section class="settings-bar" aria-label="Einstellungen">
+  <label>Taktart: <input type="text" id="timeSigInput" value="4/4" placeholder="4/4"></label>
+  <label>Titel: <input type="text" id="titleInput" value="Mein Stueck"></label>
+</section>
+
+<section class="sheet-section" aria-label="Notenblatt">
+  <h2>Notenblatt &mdash; Grand Staff</h2>
+  <canvas id="vexCanvas" width="1200" height="600"></canvas>
+  <div class="sheet-actions">
+    <button onclick="renderSheet()" class="btn-primary">Notenblatt aktualisieren</button>
+    <button onclick="exportPNG()" class="btn-primary">Als PNG speichern</button>
+  </div>
+</section>
+
+<section class="storage-section" aria-label="Speichern und Laden">
+  <h2>Stuecke verwalten</h2>
+  <div class="storage-row">
+    <input type="text" id="saveName" value="Mein Stueck" placeholder="Name">
+    <button onclick="savePiece()" class="btn-primary">Speichern</button>
+    <button onclick="loadPiece()" class="btn-secondary">Laden</button>
+    <button onclick="autoSave()" class="btn-secondary">Auto-Speichern</button>
+  </div>
+  <div id="savedList" class="saved-items"></div>
+</section>
+
+</main>
+
+<footer>
+  <p>Hinweis: Tasten klicken (Mehrfachauswahl fuer Akkorde), Laenge waehlen, dann hinzufuegen. Doppelklick = sofort.</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

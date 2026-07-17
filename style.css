@@ -1,0 +1,493 @@
+/* ============================================================
+   Piano Notenblatt — Hochwertiges Design
+   ============================================================ */
+
+:root {
+  --bg-deep: #0a080f;
+  --bg-card: #12101a;
+  --bg-sheet: #f8f4e8;
+  --gold: #c9a84c;
+  --gold-light: #e8cc7a;
+  --gold-dim: rgba(201,168,76,0.12);
+  --text-main: #f2ebe0;
+  --text-subtle: #a8a090;
+  --border-subtle: rgba(201,168,76,0.15);
+  --danger: #9a3e3e;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-main);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ----- Header ----- */
+.main-header {
+  text-align: center;
+  padding: 40px 20px 28px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 28px;
+}
+.main-header h1 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 300;
+  font-size: 3rem;
+  letter-spacing: 0.08em;
+  color: var(--gold-light);
+  text-shadow: 0 0 30px rgba(201,168,76,0.15);
+  margin-bottom: 6px;
+}
+.tagline {
+  font-family: "Cormorant Garamond", serif;
+  font-style: italic;
+  color: var(--text-subtle);
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+
+/* ----- Layout ----- */
+main {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+
+/* ----- Keyboard ----- */
+.keyboard-section {
+  background: linear-gradient(180deg, #0f0b18 0%, #080611 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 16px 16px 10px;
+  margin-bottom: 24px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.02);
+}
+.keyboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 0 6px;
+}
+.keyboard-range {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  font-family: "DM Sans", sans-serif;
+}
+.keyboard-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 8px;
+  background: #050308;
+  border: 1px solid rgba(201,168,76,0.08);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) #0f0b18;
+}
+.keyboard-scroll::-webkit-scrollbar { height: 6px; }
+.keyboard-scroll::-webkit-scrollbar-track { background: #0f0b18; }
+.keyboard-scroll::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 3px; }
+
+.keyboard {
+  display: flex;
+  position: relative;
+  height: 190px;
+  min-width: 1600px; /* Platz fuer 88 Tasten */
+  user-select: none;
+}
+
+/* Weiße Tasten */
+.key-white {
+  flex: none;
+  width: 30px;
+  height: 100%;
+  background: linear-gradient(180deg, #f5efe8 0%, #ddd6c4 70%, #b8a88e 100%);
+  border-right: 1px solid #9a8a6e;
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 10px;
+  transition: background 0.12s ease, transform 0.08s ease;
+  box-shadow: inset 0 -3px 6px rgba(0,0,0,0.06);
+}
+.key-white:hover {
+  background: linear-gradient(180deg, #fff9ec 0%, #eaddbc 70%, #c9b898 100%);
+}
+.key-white:active,
+.key-white.active {
+  background: linear-gradient(180deg, #ffe8a8 0%, #ffd57a 100%);
+  box-shadow: inset 0 0 14px rgba(201,168,76,0.6);
+  transform: translateY(2px);
+}
+.key-white .key-label {
+  font-size: 0.55rem;
+  color: #5a4e35;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.key-white .key-num {
+  font-size: 0.5rem;
+  color: #8a7a5e;
+  opacity: 0.7;
+}
+
+/* Schwarze Tasten */
+.key-black {
+  position: absolute;
+  top: 0;
+  width: 22px;
+  height: 58%;
+  background: linear-gradient(180deg, #2a2018 0%, #15100c 60%, #0a0704 100%);
+  border-radius: 0 0 4px 4px;
+  z-index: 2;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+  transition: background 0.12s ease, transform 0.08s ease;
+  box-shadow: 0 5px 12px rgba(0,0,0,0.6), inset 0 -3px 4px rgba(201,168,76,0.08);
+}
+.key-black:hover {
+  background: linear-gradient(180deg, #3a2f22 0%, #1f1612 60%, #0f0a07 100%);
+}
+.key-black:active,
+.key-black.active {
+  background: linear-gradient(180deg, #4a3828 0%, #2a1e15 60%, #16100a 100%);
+  box-shadow: inset 0 0 14px rgba(201,168,76,0.5);
+  transform: translateY(1px);
+}
+.key-black .key-label {
+  font-size: 0.55rem;
+  color: #d4c5a0;
+  font-weight: 500;
+}
+.key-black .key-num {
+  font-size: 0.45rem;
+  color: #8a7a5e;
+  opacity: 0.6;
+}
+
+/* ----- Input Section ----- */
+.input-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.hand-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.hand-btn {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-subtle);
+  font-family: inherit;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.hand-btn.active {
+  background: var(--gold-dim);
+  color: var(--gold-light);
+  border-color: var(--gold);
+  box-shadow: 0 0 15px rgba(201,168,76,0.12);
+}
+
+.duration-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.duration-bar label {
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+  letter-spacing: 0.02em;
+}
+.duration-bar select {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-deep);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.dot-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+  cursor: pointer;
+}
+
+.btn-add, .btn-secondary, .btn-danger {
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  letter-spacing: 0.02em;
+}
+.btn-add {
+  background: linear-gradient(135deg, var(--gold), #a6843e);
+  color: #0a0704;
+  font-weight: 500;
+}
+.btn-add:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgba(201,168,76,0.25);
+  transform: translateY(-1px);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--gold);
+  border-color: var(--border-subtle);
+}
+.btn-secondary:hover {
+  background: var(--gold-dim);
+  border-color: var(--gold);
+}
+.btn-danger {
+  background: transparent;
+  color: #c07060;
+  border-color: rgba(192,112,96,0.25);
+}
+.btn-danger:hover {
+  background: rgba(192,112,96,0.08);
+  border-color: rgba(192,112,96,0.45);
+}
+
+/* ----- Sequence ----- */
+.sequence-box {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.sequence-box h3 {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 400;
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  color: var(--gold-light);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+.sequence-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.sequence-chips:empty::after {
+  content: "Noch keine Noten eingegeben.";
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+.chip {
+  background: rgba(201,168,76,0.07);
+  border: 1px solid rgba(201,168,76,0.15);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 0.8rem;
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "DM Sans", sans-serif;
+  transition: background 0.15s ease;
+}
+.chip:hover { background: rgba(201,168,76,0.1); }
+.chip .remove-ch { background: none; border: none; color: var(--danger); cursor: pointer; font-weight: bold; font-size: 1.1rem; line-height: 1; padding: 0 2px; transition: color 0.15s ease; }
+.chip .remove-ch:hover { color: #e07060; }
+
+/* ----- Settings ----- */
+.settings-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+.settings-bar label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+  letter-spacing: 0.02em;
+}
+.settings-bar input {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-deep);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.85rem;
+  width: 120px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.settings-bar input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,76,0.15);
+}
+
+/* ----- Sheet ----- */
+.sheet-section {
+  background: var(--bg-sheet);
+  border: 1px solid #ddd6c4;
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+}
+.sheet-section h2 {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 400;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  color: #2a2018;
+  margin-bottom: 14px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #ddd6c4;
+  padding-bottom: 8px;
+}
+#vexCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 520px;
+  border: 1px solid #c9b898;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+/* ----- Storage ----- */
+.storage-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.storage-section h2 {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 400;
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  color: var(--gold-light);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+.storage-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.storage-row input {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-deep);
+  color: var(--text-main);
+  width: 200px;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.saved-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.saved-items:empty::after {
+  content: "Noch keine gespeicherten Stuecke.";
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+.saved-item {
+  background: rgba(201,168,76,0.06);
+  border: 1px solid rgba(201,168,76,0.18);
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-main);
+  transition: background 0.15s ease;
+}
+.saved-item:hover { background: rgba(201,168,76,0.1); }
+.saved-item .btn-load, .saved-item .btn-del {
+  background: none; border: none; cursor: pointer; font-size: 0.85rem; transition: color 0.15s ease;
+}
+.saved-item .btn-load { color: var(--gold); }
+.saved-item .btn-del { color: var(--danger); font-weight: bold; }
+.saved-item .btn-load:hover { color: var(--gold-light); }
+.saved-item .btn-del:hover { color: #e07060; }
+
+/* ----- Footer ----- */
+footer {
+  text-align: center;
+  padding: 30px 20px 20px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-subtle);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+/* ----- Responsive ----- */
+@media (max-width: 768px) {
+  .main-header h1 { font-size: 2.2rem; }
+  .keyboard { min-width: 1200px; height: 160px; }
+  .key-white { width: 24px; }
+  .key-black { width: 16px; height: 55%; }
+}
