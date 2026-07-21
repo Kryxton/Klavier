@@ -262,14 +262,17 @@ main {
   letter-spacing: 0.02em;
 }
 .btn-add {
-  background: linear-gradient(135deg, var(--gold), #a6843e);
-  color: #0a0704;
-  font-weight: 500;
+  background: linear-gradient(135deg, #c9a84c, #a6843e);
+  color: #0f0b18;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  box-shadow: 0 3px 12px rgba(201,168,76,0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+  border: none;
 }
 .btn-add:hover {
   filter: brightness(1.08);
-  box-shadow: 0 4px 14px rgba(201,168,76,0.25);
-  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(201,168,76,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  transform: translateY(-2px);
 }
 .btn-secondary {
   background: transparent;
@@ -447,7 +450,7 @@ main {
   gap: 8px;
 }
 .saved-items:empty::after {
-  content: "Noch keine gespeicherten Stuecke.";
+  content: "Noch keine gespeicherten Stücke.";
   color: var(--text-subtle);
   font-size: 0.85rem;
   opacity: 0.6;
@@ -490,4 +493,18 @@ footer {
   .keyboard { min-width: 1200px; height: 160px; }
   .key-white { width: 24px; }
   .key-black { width: 16px; height: 55%; }
+}
+
+.sheet-host {
+  background: #ffffff;
+  border: 1px solid #c9b898;
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+  min-height: 260px;
+}
+.sheet-host svg { display: block; margin: 0 auto; }
+
+.key-black.flat-mode .key-note {
+  color: #e8cc7a;
 }
