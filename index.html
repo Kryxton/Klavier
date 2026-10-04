@@ -28,44 +28,91 @@
   </div>
 </section>
 
+<!-- EDITIER-PANEL (wird eingeblendet, wenn Note geklickt wird) -->
+<section class="edit-panel" id="editPanel" aria-label="Note bearbeiten" hidden>
+  <div class="edit-header">
+    <h3>Ausgewählte Note / Akkord</h3>
+    <button class="edit-close" onclick="closeEditPanel()" aria-label="Schließen">×</button>
+  </div>
+  <div class="edit-body">
+    <div class="edit-info">
+      <span class="edit-label">Hand:</span> <span id="editHand">–</span>
+      &nbsp;·&nbsp;
+      <span class="edit-label">Position:</span> <span id="editIndex">–</span>
+      &nbsp;·&nbsp;
+      <span class="edit-label">Töne:</span> <span id="editKeys">–</span>
+    </div>
+    <div class="edit-row">
+      <label>Neue Länge:
+        <select id="editDuration">
+          <option value="w">Ganze</option>
+          <option value="h">Halbe</option>
+          <option value="q">Viertel</option>
+          <option value="8">Achtel</option>
+          <option value="16">Sechzehntel</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="editDotted"> Punktiert</label>
+      <button onclick="applyEditDuration()" class="btn-add">Länge übernehmen</button>
+    </div>
+    <div class="edit-row" id="editAccidentalRow">
+      <span class="edit-label">Vorzeichen der schwarzen Tasten:</span>
+      <div id="editAccidentalList" class="edit-accidentals"></div>
+    </div>
+    <div class="edit-row">
+      <button onclick="moveEvent(-1)" class="btn-secondary">← Nach links</button>
+      <button onclick="moveEvent(1)" class="btn-secondary">Nach rechts →</button>
+      <button onclick="deleteSelectedEvent()" class="btn-danger">Löschen</button>
+    </div>
+  </div>
+</section>
+
 <section class="input-section" aria-label="Eingabe">
   <div class="hand-tabs">
     <button class="hand-btn active" data-hand="right" onclick="switchHand('right')">Rechte Hand &mdash; Violinschluessel</button>
     <button class="hand-btn" data-hand="left" onclick="switchHand('left')">Linke Hand &mdash; Bassschluessel</button>
   </div>
 
-<div class="duration-bar">
-  <label for="durationSelect">Notenlänge:</label>
-  <select id="durationSelect">
-    <option value="w">Ganze Note</option>
-    <option value="h">Halbe Note</option>
-    <option value="q" selected>Viertelnote</option>
-    <option value="8">Achtelnote</option>
-    <option value="16">Sechzehntelnote</option>
-  </select>
-  <label class="dot-check"><input type="checkbox" id="dottedCheck"> Punktiert</label>
+  <div class="duration-bar">
+    <label for="durationSelect">Notenlänge:</label>
+    <select id="durationSelect" onchange="onDurationChange()">
+      <option value="w">Ganze Note</option>
+      <option value="h">Halbe Note</option>
+      <option value="q" selected>Viertelnote</option>
+      <option value="8">Achtelnote</option>
+      <option value="16">Sechzehntelnote</option>
+    </select>
+    <label class="dot-check"><input type="checkbox" id="dottedCheck" onchange="onDurationChange()"> Punktiert</label>
 
-  <label for="accidentalSelect">Vorzeichen (schwarze Tasten):</label>
-  <select id="accidentalSelect" onchange="onAccidentalModeChange()">
-    <option value="sharp" selected>♯ Kreuz (Cis, Dis, Fis…)</option>
-    <option value="flat">♭ B (Des, Es, Ges…)</option>
-  </select>
-
-  <button onclick="addNote()" class="btn-add">Note / Akkord hinzufügen</button>
-  <button onclick="addRest()" class="btn-add btn-secondary">Pause einfügen</button>
-  <button onclick="undoLast()" class="btn-secondary">Letztes entfernen</button>
-  <button onclick="clearHand()" class="btn-danger">Spur leeren</button>
-</div>
+    <label for="accidentalSelect" style="margin-left:10px;">Schwarze Tasten:</label>
+    <select id="accidentalSelect" onchange="onAccidentalModeChange()">
+      <option value="sharp" selected>♯ Kreuz</option>
+      <option value="flat">♭ B</option>
+    </select>
+  </div>
+  
+  <div class="duration-bar" style="border-bottom:none; padding-bottom:0;">
+    <button onclick="addNote()" class="btn-add">Note / Akkord hinzufügen</button>
+    <button onclick="addRest()" class="btn-add btn-secondary">Pause einfügen</button>
+    <button onclick="undoLast()" class="btn-secondary">Letztes entfernen</button>
+    <button onclick="duplicateMeasurePrompt()" class="btn-secondary">Takt duplizieren...</button>
+    <button onclick="clearHand()" class="btn-danger" style="margin-left:auto;">Spur leeren</button>
+  </div>
 
   <div class="sequence-box">
-    <h3>Sequenz &mdash; <span id="currentHandLabel">Rechte Hand</span></h3>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3>Sequenz &mdash; <span id="currentHandLabel">Rechte Hand</span></h3>
+      <button onclick="toggleSequence()" id="toggleSeqBtn" class="btn-secondary" style="padding:4px 10px; font-size:0.75rem;">Verbergen</button>
+    </div>
     <div id="sequenceList" class="sequence-chips"></div>
   </div>
 </section>
 
 <section class="settings-bar" aria-label="Einstellungen">
-  <label>Taktart: <input type="text" id="timeSigInput" value="4/4" placeholder="4/4"></label>
   <label>Titel: <input type="text" id="titleInput" value="Mein Stück"></label>
+  <label>Taktart: <input type="text" id="timeSigInput" value="4/4" placeholder="4/4" style="width:70px;"></label>
+  <label>Takte pro Zeile: <input type="number" id="layoutMeasures" value="4" min="1" max="10" onchange="renderSheet()" style="width:60px;"></label>
+  <label>Größe (%): <input type="number" id="layoutScale" value="100" min="50" max="200" step="10" onchange="renderSheet()" style="width:70px;"></label>
 </section>
 
 <section class="sheet-section" aria-label="Notenblatt">
@@ -91,7 +138,7 @@
 </main>
 
 <footer>
-  <p>Tasten klicken (Mehrfachauswahl für Akkorde), Länge wählen, dann hinzufügen. Doppelklick = sofort. Rechtsklick auf eine ausgewählte schwarze Taste = Vorzeichen einzeln umschalten.</p>
+  <p>Tasten klicken (Mehrfachauswahl), Länge wählen, dann hinzufügen. Im Notenblatt auf Noten klicken, um sie zu bearbeiten.</p>
 </footer>
 
 <script src="script.js"></script>
