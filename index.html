@@ -14,7 +14,7 @@
 
 <header class="main-header">
   <h1>Piano Notenblatt</h1>
-  <p class="tagline">88 Tasten &mdash; Zwei Haende &mdash; Klassisches Grand Staff</p>
+  <p class="tagline">88 Tasten &mdash; Zwei Hände &mdash; Klassisches Grand Staff</p>
 </header>
 
 <main>
@@ -28,7 +28,7 @@
   </div>
 </section>
 
-<!-- EDITIER-PANEL (wird eingeblendet, wenn Note geklickt wird) -->
+<!-- BEARBEITEN-PANEL (wird eingeblendet, wenn eine Note geklickt wird) -->
 <section class="edit-panel" id="editPanel" aria-label="Note bearbeiten" hidden>
   <div class="edit-header">
     <h3>Ausgewählte Note / Akkord</h3>
@@ -42,6 +42,7 @@
       &nbsp;·&nbsp;
       <span class="edit-label">Töne:</span> <span id="editKeys">–</span>
     </div>
+
     <div class="edit-row">
       <label>Neue Länge:
         <select id="editDuration">
@@ -55,13 +56,29 @@
       <label><input type="checkbox" id="editDotted"> Punktiert</label>
       <button onclick="applyEditDuration()" class="btn-add">Länge übernehmen</button>
     </div>
+
+    <div class="edit-row">
+      <label><input type="checkbox" id="editBeam" onchange="applyEditBeam()"> Mit nächster Note verbinden (Balken, nur Achtel/Sechzehntel)</label>
+    </div>
+
+    <div class="edit-row">
+      <label>Klaviatur antippen:
+        <select id="editKeyMode">
+          <option value="replace" selected>Ton ersetzen</option>
+          <option value="toggle">Ton hinzufügen / entfernen</option>
+        </select>
+      </label>
+    </div>
+
     <div class="edit-row" id="editAccidentalRow">
       <span class="edit-label">Vorzeichen der schwarzen Tasten:</span>
       <div id="editAccidentalList" class="edit-accidentals"></div>
     </div>
+
     <div class="edit-row">
       <button onclick="moveEvent(-1)" class="btn-secondary">← Nach links</button>
       <button onclick="moveEvent(1)" class="btn-secondary">Nach rechts →</button>
+      <button onclick="duplicateSelected()" class="btn-secondary">Duplizieren</button>
       <button onclick="deleteSelectedEvent()" class="btn-danger">Löschen</button>
     </div>
   </div>
@@ -69,8 +86,8 @@
 
 <section class="input-section" aria-label="Eingabe">
   <div class="hand-tabs">
-    <button class="hand-btn active" data-hand="right" onclick="switchHand('right')">Rechte Hand &mdash; Violinschluessel</button>
-    <button class="hand-btn" data-hand="left" onclick="switchHand('left')">Linke Hand &mdash; Bassschluessel</button>
+    <button class="hand-btn active" data-hand="right" onclick="switchHand('right')">Rechte Hand &mdash; Violinschlüssel</button>
+    <button class="hand-btn" data-hand="left" onclick="switchHand('left')">Linke Hand &mdash; Bassschlüssel</button>
   </div>
 
   <div class="duration-bar">
@@ -90,14 +107,19 @@
       <option value="flat">♭ B</option>
     </select>
   </div>
-  
-  <div class="duration-bar" style="border-bottom:none; padding-bottom:0; gap:8px;">
-    <button onclick="addNote()" class="btn-add">Hinzufügen</button>
-    <button onclick="addRest()" class="btn-add btn-secondary">Pause</button>
+
+  <div class="duration-bar">
+    <button onclick="addNote()" class="btn-add">Note / Akkord hinzufügen</button>
+    <button onclick="addRest()" class="btn-add btn-secondary">Pause einfügen</button>
     <button onclick="undoLast()" class="btn-secondary">Letztes entfernen</button>
-    <button onclick="duplicateLastNPrompt()" class="btn-secondary">Letzte X kopieren...</button>
-    <button onclick="duplicateMeasurePrompt()" class="btn-secondary">Takt kopieren...</button>
     <button onclick="clearHand()" class="btn-danger" style="margin-left:auto;">Spur leeren</button>
+  </div>
+
+  <div class="duration-bar" style="border-bottom:none; padding-bottom:0;">
+    <label for="dupCount">Anzahl:</label>
+    <input type="number" id="dupCount" value="1" min="1" max="32" style="width:64px;">
+    <button onclick="duplicateLast()" class="btn-secondary">Letzte duplizieren</button>
+    <button onclick="duplicateMeasurePrompt()" class="btn-secondary">Takt duplizieren...</button>
   </div>
 
   <div class="sequence-box">
@@ -114,6 +136,7 @@
   <label>Taktart: <input type="text" id="timeSigInput" value="4/4" placeholder="4/4" style="width:70px;"></label>
   <label>Takte pro Zeile: <input type="number" id="layoutMeasures" value="4" min="1" max="10" onchange="renderSheet()" style="width:60px;"></label>
   <label>Größe (%): <input type="number" id="layoutScale" value="100" min="50" max="200" step="10" onchange="renderSheet()" style="width:70px;"></label>
+  <label><input type="checkbox" id="autoBeam" onchange="renderSheet()"> Achtel/Sechzehntel automatisch verbinden</label>
 </section>
 
 <section class="sheet-section" aria-label="Notenblatt">
