@@ -1,7 +1,3 @@
-/* ============================================================
-   Piano Notenblatt — VexFlow mit wählbaren Vorzeichen
-   ============================================================ */
-
 let currentHand = 'right';
 let piece = {
   title: 'Mein Stück',
@@ -9,539 +5,475 @@ let piece = {
   hands: { right: [], left: [] }
 };
 
-// Globaler Vorzeichen-Modus: 'sharp' oder 'flat'
+// Einstellungs-Speicher für Hände (damit links & rechts eigene Längen behalten)
+let handSettings = {
+  right: { dur: 'q', dotted: false },
+  left:  { dur: 'w', dotted: false }
+};
+
 let accidentalMode = 'sharp';
-
-// Pro-Taste-Overrides für die aktuelle Auswahl:
-// Map: keyNum -> 'sharp' | 'flat'
 let selectedAccidentals = new Map();
+let selectedKeys = new Set();
 
-/* ---------- 88-Tasten-Mapping mit beiden Schreibweisen ---------- */
+// Für Noten-Klick
+let selectedNote = null;
+let noteElementMap = [];
+
+/* ---------- 88-Tasten-Mapping ---------- */
 const MAP_88 = [];
-{
-  // Chromatisch ab A: A, A#/Bb, B, C, C#/Db, D, D#/Eb, E, F, F#/Gb, G, G#/Ab
-  // sharpName / flatName in VexFlow-Notation ("c/4", "db/4" …)
-  // Bei b/cb und e#/fb usw. brauchen wir Oktavwechsel korrekt.
-  const scheme = [
-    // { sharpLetter, sharpAcc, flatLetter, flatAcc, isBlack, display }
-    { sL:'a',  sA:'',  fL:'a',  fA:'',  black:false, disp:'A'  },
-    { sL:'a',  sA:'#', fL:'b',  fA:'b', black:true,  disp:'A♯/B♭' },
-    { sL:'b',  sA:'',  fL:'b',  fA:'',  black:false, disp:'B'  },
-    { sL:'c',  sA:'',  fL:'c',  fA:'',  black:false, disp:'C'  },
-    { sL:'c',  sA:'#', fL:'d',  fA:'b', black:true,  disp:'C♯/D♭' },
-    { sL:'d',  sA:'',  fL:'d',  fA:'',  black:false, disp:'D'  },
-    { sL:'d',  sA:'#', fL:'e',  fA:'b', black:true,  disp:'D♯/E♭' },
-    { sL:'e',  sA:'',  fL:'e',  fA:'',  black:false, disp:'E'  },
-    { sL:'f',  sA:'',  fL:'f',  fA:'',  black:false, disp:'F'  },
-    { sL:'f',  sA:'#', fL:'g',  fA:'b', black:true,  disp:'F♯/G♭' },
-    { sL:'g',  sA:'',  fL:'g',  fA:'',  black:false, disp:'G'  },
-    { sL:'g',  sA:'#', fL:'a',  fA:'b', black:true,  disp:'G♯/A♭' }
-  ];
+const scheme = [
+  { sL:'a', sA:'',  fL:'a', fA:'',  black:false, disp:'A' },
+  { sL:'a', sA:'#', fL:'b', fA:'b', black:true,  disp:'A♯/B♭' },
+  { sL:'b', sA:'',  fL:'b', fA:'',  black:false, disp:'B' },
+  { sL:'c', sA:'',  fL:'c', fA:'',  black:false, disp:'C' },
+  { sL:'c', sA:'#', fL:'d', fA:'b', black:true,  disp:'C♯/D♭' },
+  { sL:'d', sA:'',  fL:'d', fA:'',  black:false, disp:'D' },
+  { sL:'d', sA:'#', fL:'e', fA:'b', black:true,  disp:'D♯/E♭' },
+  { sL:'e', sA:'',  fL:'e', fA:'',  black:false, disp:'E' },
+  { sL:'f', sA:'',  fL:'f', fA:'',  black:false, disp:'F' },
+  { sL:'f', sA:'#', fL:'g', fA:'b', black:true,  disp:'F♯/G♭' },
+  { sL:'g', sA:'',  fL:'g', fA:'',  black:false, disp:'G' },
+  { sL:'g', sA:'#', fL:'a', fA:'b', black:true,  disp:'G♯/A♭' }
+];
 
-  for (let i = 0; i < 88; i++) {
-    const midi = 21 + i;
-    // Wissenschaftliche Oktave: C4 = MIDI 60
-    const scientificOctave = Math.floor(midi / 12) - 1;
-    const pcFromA = i % 12;
-    const s = scheme[pcFromA];
-
-    // Für die Sharp-Schreibweise verwenden wir die Oktave des Grundbuchstabens.
-    // Beispiel B♭4 (MIDI 70) ist als „a#/4" korrekt.
-    // Für die Flat-Schreibweise kann sich die Oktave ändern:
-    //   A♯4 (MIDI 70) = B♭4 → gleiche Oktave (Grundbuchstabe B)
-    //   G♯4 (MIDI 68) = A♭4 → gleiche Oktave (Grundbuchstabe A)
-    // Ausnahme wäre nur bei Cb/B# — kommt hier nicht vor, weil wir nur die
-    // 5 schwarzen Tasten enharmonisch umschalten (A#↔Bb, C#↔Db, D#↔Eb, F#↔Gb, G#↔Ab).
-    const sharpOctave = scientificOctave;
-    const flatOctave  = scientificOctave;
-
-    MAP_88.push({
-      keyNum: i + 1,
-      midi,
-      isBlack: s.black,
-      displayName: s.disp,
-      // Zwei Schreibweisen mit VexFlow-Key + Vorzeichen-Modifier
-      sharp: {
-        vexKey: s.sL + '/' + sharpOctave,
-        accidental: s.sA || null,
-        label: s.sL.toUpperCase() + (s.sA === '#' ? '♯' : '') + sharpOctave
-      },
-      flat: {
-        vexKey: s.fL + '/' + flatOctave,
-        accidental: s.fA || null,
-        label: s.fL.toUpperCase() + (s.fA === 'b' ? '♭' : '') + flatOctave
-      }
-    });
-  }
+for (let i = 0; i < 88; i++) {
+  const midi = 21 + i;
+  const oct = Math.floor(midi / 12) - 1;
+  const s = scheme[i % 12];
+  MAP_88.push({
+    keyNum: i + 1, midi, isBlack: s.black, displayName: s.disp,
+    sharp: { vexKey: s.sL + '/' + oct, accidental: s.sA || null, label: s.sL.toUpperCase() + (s.sA==='#'?'♯':'') + oct },
+    flat:  { vexKey: s.fL + '/' + oct, accidental: s.fA || null, label: s.fL.toUpperCase() + (s.fA==='b'?'♭':'') + oct }
+  });
 }
-
 function getKeyData(num) { return MAP_88[num - 1] || null; }
-
-// Liefert Schreibweise für ein Event/eine Taste
 function getSpelling(keyNum, spelling) {
   const d = getKeyData(keyNum);
   if (!d) return null;
-  if (!d.isBlack) return d.sharp; // egal, weiße Taste
-  return spelling === 'flat' ? d.flat : d.sharp;
+  return (!d.isBlack || spelling !== 'flat') ? d.sharp : d.flat;
 }
 
-/* ---------- Klaviatur bauen ---------- */
+/* ---------- Klaviatur bauen (Absolute Positionen) ---------- */
 function buildKeyboard() {
   const container = document.getElementById('keyboard');
   container.innerHTML = '';
+  let whiteIndex = 0;
+  
+  // Weiße Tasten
   MAP_88.forEach(item => {
+    if (item.isBlack) return;
     const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = item.isBlack ? 'key-black' : 'key-white';
-    btn.dataset.key = item.keyNum;
-    btn.setAttribute('aria-label', item.displayName);
-
-    // Beschriftung: Bei schwarzen Tasten die aktuelle Schreibweise anzeigen
-    const label = item.isBlack
-      ? (accidentalMode === 'flat' ? item.flat.label : item.sharp.label)
-      : item.sharp.label;
-
-    btn.innerHTML = `
-      <span class="key-num">${item.keyNum}</span>
-      <span class="key-note">${label}</span>
-    `;
-    btn.addEventListener('click', () => handleKeyClick(item));
-    btn.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      toggleKeyAccidental(item);
-    });
-
-    if (item.isBlack) {
-      const whiteBefore = MAP_88.slice(0, item.keyNum - 1).filter(s => !s.isBlack).length;
-      btn.style.left = (whiteBefore * 30 - 11) + 'px';
-    }
+    btn.className = 'key-white'; btn.dataset.key = item.keyNum; btn.style.left = (whiteIndex * 30) + 'px';
+    btn.innerHTML = `<span class="key-num">${item.keyNum}</span><span class="key-note">${item.sharp.label}</span>`;
+    btn.onclick = () => handleKeyClick(item);
+    btn.oncontextmenu = (e) => { e.preventDefault(); toggleKeyAccidental(item); };
+    container.appendChild(btn);
+    whiteIndex++;
+  });
+  
+  // Schwarze Tasten
+  MAP_88.forEach(item => {
+    if (!item.isBlack) return;
+    const btn = document.createElement('button');
+    btn.className = 'key-black'; btn.dataset.key = item.keyNum;
+    const whiteBefore = MAP_88.slice(0, item.keyNum - 1).filter(s => !s.isBlack).length;
+    btn.style.left = (whiteBefore * 30 - 10) + 'px'; // -10 = halbe Breite der schwarzen Taste (20)
+    btn.innerHTML = `<span class="key-num">${item.keyNum}</span><span class="key-note">${accidentalMode==='flat'?item.flat.label:item.sharp.label}</span>`;
+    btn.onclick = () => handleKeyClick(item);
+    btn.oncontextmenu = (e) => { e.preventDefault(); toggleKeyAccidental(item); };
     container.appendChild(btn);
   });
 }
 
-// Aktualisiert die Beschriftung der schwarzen Tasten, wenn Modus wechselt
 function refreshKeyboardLabels() {
   document.querySelectorAll('.key-black').forEach(btn => {
     const k = parseInt(btn.dataset.key);
     const item = getKeyData(k);
-    if (!item) return;
-    // Wenn Taste ausgewählt und individuellen Override hat, den nehmen
     const spelling = selectedAccidentals.get(k) || accidentalMode;
-    const label = spelling === 'flat' ? item.flat.label : item.sharp.label;
-    const noteSpan = btn.querySelector('.key-note');
-    if (noteSpan) noteSpan.textContent = label;
+    btn.querySelector('.key-note').textContent = spelling === 'flat' ? item.flat.label : item.sharp.label;
     btn.classList.toggle('flat-mode', spelling === 'flat');
   });
 }
-
 function onAccidentalModeChange() {
   accidentalMode = document.getElementById('accidentalSelect').value;
-  // Individuelle Overrides zurücksetzen, damit der neue Modus sichtbar wirkt
   selectedAccidentals.clear();
   refreshKeyboardLabels();
 }
 
-/* ---------- Auswahl ---------- */
-let selectedKeys = new Set();
-
 function handleKeyClick(item) {
-  if (selectedKeys.has(item.keyNum)) {
-    selectedKeys.delete(item.keyNum);
-    selectedAccidentals.delete(item.keyNum);
-  } else {
-    selectedKeys.add(item.keyNum);
-  }
-  updateSelectionVisual();
-  refreshKeyboardLabels();
+  if (selectedKeys.has(item.keyNum)) { selectedKeys.delete(item.keyNum); selectedAccidentals.delete(item.keyNum); }
+  else { selectedKeys.add(item.keyNum); }
+  updateSelectionVisual(); refreshKeyboardLabels();
 }
-
-// Rechtsklick: Vorzeichen dieser einen Taste umschalten (nur schwarze Tasten sinnvoll)
 function toggleKeyAccidental(item) {
   if (!item.isBlack) return;
   const current = selectedAccidentals.get(item.keyNum) || accidentalMode;
-  const next = current === 'sharp' ? 'flat' : 'sharp';
-  selectedAccidentals.set(item.keyNum, next);
-  // Falls Taste noch nicht ausgewählt, direkt auswählen
+  selectedAccidentals.set(item.keyNum, current === 'sharp' ? 'flat' : 'sharp');
   selectedKeys.add(item.keyNum);
-  updateSelectionVisual();
-  refreshKeyboardLabels();
+  updateSelectionVisual(); refreshKeyboardLabels();
 }
-
 function updateSelectionVisual() {
   document.querySelectorAll('.key-white, .key-black').forEach(btn => {
-    const k = parseInt(btn.dataset.key);
-    btn.classList.toggle('active', selectedKeys.has(k));
+    btn.classList.toggle('active', selectedKeys.has(parseInt(btn.dataset.key)));
   });
 }
 
-/* ---------- Eingabe ---------- */
+/* ---------- Eingabe & Hand-Wechsel ---------- */
+function onDurationChange() {
+  handSettings[currentHand].dur = document.getElementById('durationSelect').value;
+  handSettings[currentHand].dotted = document.getElementById('dottedCheck').checked;
+}
 function getDurationValue() {
   let d = document.getElementById('durationSelect').value;
   if (document.getElementById('dottedCheck').checked) d += '.d';
   return d;
 }
-
-function addNote() {
-  if (!selectedKeys.size) { alert('Bitte mindestens eine Taste wählen.'); return; }
-  const sorted = Array.from(selectedKeys).sort((a, b) => a - b);
-  // Pro Taste die Schreibweise festhalten
-  const spellings = sorted.map(k => {
-    const item = getKeyData(k);
-    if (!item.isBlack) return 'sharp';
-    return selectedAccidentals.get(k) || accidentalMode;
-  });
-  piece.hands[currentHand].push({
-    type: 'note',
-    keys: sorted,
-    spellings, // parallel zu keys
-    duration: getDurationValue()
-  });
-  selectedKeys.clear();
-  selectedAccidentals.clear();
-  updateSelectionVisual();
-  refreshKeyboardLabels();
-  renderSequence(); renderSheet(); autoSave();
+function switchHand(hand) {
+  currentHand = hand;
+  document.querySelectorAll('.hand-btn').forEach(b => b.classList.toggle('active', b.dataset.hand === hand));
+  document.getElementById('currentHandLabel').textContent = hand === 'right' ? 'Rechte Hand' : 'Linke Hand';
+  
+  // Gespeicherte Notenlänge für diese Hand wiederherstellen
+  document.getElementById('durationSelect').value = handSettings[hand].dur;
+  document.getElementById('dottedCheck').checked = handSettings[hand].dotted;
+  
+  renderSequence();
 }
 
+function addNote() {
+  if (!selectedKeys.size) { alert('Bitte Tasten wählen.'); return; }
+  const sorted = Array.from(selectedKeys).sort((a,b) => a-b);
+  const spellings = sorted.map(k => !getKeyData(k).isBlack ? 'sharp' : (selectedAccidentals.get(k) || accidentalMode));
+  piece.hands[currentHand].push({ type: 'note', keys: sorted, spellings, duration: getDurationValue() });
+  selectedKeys.clear(); selectedAccidentals.clear();
+  updateSelectionVisual(); refreshKeyboardLabels();
+  renderSequence(); renderSheet(); autoSave();
+}
 function addRest() {
   piece.hands[currentHand].push({ type: 'rest', duration: getDurationValue() });
   renderSequence(); renderSheet(); autoSave();
 }
 function undoLast() {
-  if (piece.hands[currentHand].length) {
-    piece.hands[currentHand].pop();
-    renderSequence(); renderSheet(); autoSave();
-  }
+  piece.hands[currentHand].pop();
+  renderSequence(); renderSheet(); autoSave();
 }
 function clearHand() {
-  if (!confirm('Spur wirklich leeren?')) return;
-  piece.hands[currentHand] = [];
-  renderSequence(); renderSheet(); autoSave();
+  if (confirm('Spur leeren?')) { piece.hands[currentHand] = []; renderSequence(); renderSheet(); autoSave(); }
 }
-function removeEvent(index) {
-  piece.hands[currentHand].splice(index, 1);
+function removeEvent(i) {
+  piece.hands[currentHand].splice(i, 1);
   renderSequence(); renderSheet(); autoSave();
-}
-function switchHand(hand) {
-  currentHand = hand;
-  document.querySelectorAll('.hand-btn').forEach(b => b.classList.toggle('active', b.dataset.hand === hand));
-  document.getElementById('currentHandLabel').textContent = hand === 'right' ? 'Rechte Hand' : 'Linke Hand';
-  renderSequence();
 }
 
-/* ---------- Sequenz-Anzeige ---------- */
-function formatDur(d) {
-  const base = d.replace('.d', '');
-  const names = { 'w':'Ganz', 'h':'Halb', 'q':'Viertel', '8':'Achtel', '16':'Sechzehntel' };
-  let label = names[base] || base;
-  if (d.includes('.d')) label += ' (pkt)';
-  return label;
+// Takt duplizieren
+function duplicateMeasurePrompt() {
+  const m = prompt("Welchen Takt möchtest du in die " + (currentHand==='right'?'Rechte':'Linke') + " Hand kopieren (als neuen Takt ans Ende hängen)?\nGib eine Taktnummer ein (1, 2, ...):");
+  if (!m) return;
+  const num = parseInt(m);
+  if (isNaN(num) || num < 1) return alert("Ungültige Taktnummer.");
+  
+  // Taktart bestimmen für korrekte Gruppierung
+  const ts = document.getElementById('timeSigInput').value || '4/4';
+  let beats = null;
+  if (/^\d+\/\d+$/.test(ts)) {
+    const p = ts.split('/').map(Number);
+    beats = p[0] * (4/p[1]);
+  }
+  
+  const measures = groupIntoMeasures(piece.hands[currentHand], beats);
+  if (num > measures.length) return alert("Takt " + num + " existiert in dieser Hand nicht.");
+  
+  const toCopy = JSON.parse(JSON.stringify(measures[num - 1]));
+  piece.hands[currentHand].push(...toCopy);
+  renderSequence(); renderSheet(); autoSave();
+}
+
+/* ---------- Sequenz Toggle ---------- */
+let seqVisible = true;
+function toggleSequence() {
+  seqVisible = !seqVisible;
+  document.getElementById('sequenceList').style.display = seqVisible ? 'flex' : 'none';
+  document.getElementById('toggleSeqBtn').textContent = seqVisible ? 'Verbergen' : 'Anzeigen';
 }
 function renderSequence() {
-  const box = document.getElementById('sequenceList');
-  box.innerHTML = '';
-  const events = piece.hands[currentHand];
-  if (!events.length) return;
-  events.forEach((ev, i) => {
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    let text;
-    if (ev.type === 'note') {
-      text = ev.keys.map((k, idx) => {
-        const spelling = (ev.spellings && ev.spellings[idx]) || 'sharp';
-        const sp = getSpelling(k, spelling);
-        return sp ? sp.label : '?';
-      }).join(', ');
-    } else {
-      text = 'Pause';
-    }
-    text += ' (' + formatDur(ev.duration) + ')';
-    chip.innerHTML = `<span>${text}</span><button class="remove-ch" onclick="removeEvent(${i})" aria-label="Entfernen">×</button>`;
+  const box = document.getElementById('sequenceList'); box.innerHTML = '';
+  piece.hands[currentHand].forEach((ev, i) => {
+    const chip = document.createElement('div'); chip.className = 'chip';
+    const dStr = ev.duration.replace('.d','') + (ev.duration.includes('.d')?' (pkt)':'');
+    let text = ev.type === 'note' ? ev.keys.map((k,idx) => getSpelling(k, ev.spellings?.[idx]||'sharp').label).join(',') : 'Pause';
+    chip.innerHTML = `<span>${text} (${dStr})</span><button class="remove-ch" onclick="removeEvent(${i})">×</button>`;
     box.appendChild(chip);
   });
 }
 
 /* ============================================================
-   VexFlow-Rendering
+   VexFlow & Edit-Logik
    ============================================================ */
-function VF() {
-  return (window.Vex && window.Vex.Flow) ? window.Vex.Flow : window.VexFlow;
+function VF() { return window.Vex.Flow || window.VexFlow; }
+function parseDuration(d) { return { duration: d.replace('.d',''), dots: d.endsWith('.d')?1:0 }; }
+function eventBeats(ev) {
+  const { duration, dots } = parseDuration(ev.duration);
+  const base = { 'w':4, 'h':2, 'q':1, '8':0.5, '16':0.25 }[duration] || 1;
+  return dots ? base * 1.5 : base;
 }
-
-function parseDuration(d) {
-  const dots = d.endsWith('.d') ? 1 : 0;
-  const base = d.replace('.d', '');
-  return { duration: base, dots };
+function groupIntoMeasures(events, bpm) {
+  if (!bpm) return [events];
+  const ms = []; let cur = [], cb = 0;
+  for (const ev of events) {
+    const b = eventBeats(ev);
+    if (cb + b > bpm + 0.001 && cur.length > 0) { ms.push(cur); cur = []; cb = 0; }
+    cur.push(ev); cb += b;
+  }
+  if (cur.length) ms.push(cur);
+  return ms;
+}
+function buildIndexMap(measures) {
+  let counter = 0; return measures.map(m => m.map(() => counter++));
 }
 
 function makeStaveNote(ev, clef) {
-  const vf = VF();
-  const { duration, dots } = parseDuration(ev.duration);
-
+  const vf = VF(); const { duration, dots } = parseDuration(ev.duration);
   if (ev.type === 'rest') {
-    const restKey = clef === 'treble' ? 'b/4' : 'd/3';
-    const note = new vf.StaveNote({ clef, keys: [restKey], duration: duration + 'r' });
-    if (dots) vf.Dot.buildAndAttach([note], { all: true });
-    return note;
+    const note = new vf.StaveNote({ clef, keys: [clef==='treble'?'b/4':'d/3'], duration: duration+'r' });
+    if (dots) vf.Dot.buildAndAttach([note], { all: true }); return note;
   }
-
-  // Akkord/Note mit individuellen Schreibweisen
-  // Sortierung nach Tonhöhe (MIDI), damit VexFlow konsistent rendert
-  const pairs = ev.keys.map((k, idx) => {
-    const spelling = (ev.spellings && ev.spellings[idx]) || 'sharp';
-    return { keyNum: k, spelling, midi: getKeyData(k).midi };
-  }).sort((a, b) => a.midi - b.midi);
-
-  const vexKeys = [];
-  const accidentals = []; // Array von { index, symbol }
+  const pairs = ev.keys.map((k, i) => ({ k, sp: ev.spellings?.[i]||'sharp', midi: getKeyData(k).midi })).sort((a,b)=>a.midi-b.midi);
+  const vexKeys = [], acc = [];
   pairs.forEach((p, i) => {
-    const sp = getSpelling(p.keyNum, p.spelling);
-    vexKeys.push(sp.vexKey);
-    if (sp.accidental) accidentals.push({ index: i, symbol: sp.accidental });
+    const s = getSpelling(p.k, p.sp); vexKeys.push(s.vexKey);
+    if (s.accidental) acc.push({ i, a: s.accidental });
   });
-
   const note = new vf.StaveNote({ clef, keys: vexKeys, duration });
-  accidentals.forEach(a => {
-    note.addModifier(new vf.Accidental(a.symbol), a.index);
-  });
-  if (dots) vf.Dot.buildAndAttach([note], { all: true });
-  return note;
-}
-
-function eventBeats(ev) {
-  const { duration, dots } = parseDuration(ev.duration);
-  const base = { 'w': 4, 'h': 2, 'q': 1, '8': 0.5, '16': 0.25 }[duration] || 1;
-  return dots ? base * 1.5 : base;
-}
-
-function groupIntoMeasures(events, beatsPerMeasure) {
-  if (!beatsPerMeasure) return [events];
-  const measures = [];
-  let current = [];
-  let currentBeats = 0;
-  for (const ev of events) {
-    const b = eventBeats(ev);
-    if (currentBeats + b > beatsPerMeasure + 0.0001 && current.length > 0) {
-      measures.push(current);
-      current = [];
-      currentBeats = 0;
-    }
-    current.push(ev);
-    currentBeats += b;
-  }
-  if (current.length) measures.push(current);
-  return measures;
+  acc.forEach(x => note.addModifier(new vf.Accidental(x.a), x.i));
+  if (dots) vf.Dot.buildAndAttach([note], { all: true }); return note;
 }
 
 function renderSheet() {
-  const vf = VF();
-  if (!vf) { console.warn('VexFlow nicht geladen'); return; }
+  const vf = VF(); if (!vf) return;
+  const host = document.getElementById('sheetHost'); host.innerHTML = '';
+  noteElementMap = [];
 
-  const host = document.getElementById('sheetHost');
-  host.innerHTML = '';
+  const tsStr = (document.getElementById('timeSigInput').value || '').trim();
+  let bpm = null, numB = 4, den = 4;
+  if (/^\d+\/\d+$/.test(tsStr)) { const p = tsStr.split('/'); numB = +p[0]; den = +p[1]; bpm = numB * (4/den); }
+  
+  const layoutMeasures = parseInt(document.getElementById('layoutMeasures').value) || 4;
+  const layoutScale = (parseInt(document.getElementById('layoutScale').value) || 100) / 100;
 
-  const timeSigStr = (document.getElementById('timeSigInput').value || '').trim();
-  let numBeats = null, beatValue = 4;
-  let hasTimeSig = false;
-  if (timeSigStr && /^\d+\/\d+$/.test(timeSigStr)) {
-    const [n, d] = timeSigStr.split('/').map(Number);
-    if (n > 0 && d > 0) { numBeats = n; beatValue = d; hasTimeSig = true; }
-  }
-  const beatsPerMeasure = hasTimeSig ? (numBeats * (4 / beatValue)) : null;
+  const rM = groupIntoMeasures(piece.hands.right, bpm);
+  const lM = groupIntoMeasures(piece.hands.left, bpm);
+  const mCount = Math.max(rM.length, lM.length, 1);
+  const rIdx = buildIndexMap(rM), lIdx = buildIndexMap(lM);
 
-  const rightMeasures = groupIntoMeasures(piece.hands.right, beatsPerMeasure);
-  const leftMeasures  = groupIntoMeasures(piece.hands.left, beatsPerMeasure);
-  const measureCount = Math.max(rightMeasures.length, leftMeasures.length, 1);
-
-  const pageWidth = 1180;
-  const leftMargin = 20;
-  const clefWidth = 90;
-  const measuresPerLine = Math.min(4, Math.max(1, measureCount));
-  const usableWidth = pageWidth - leftMargin - 20;
-  const measureWidth = Math.floor((usableWidth - clefWidth) / measuresPerLine);
-  const firstMeasureWidth = measureWidth + clefWidth;
-
-  const systemHeight = 220;
-  const trebleY = 20;
-  const bassY = 120;
-
-  const lineCount = Math.ceil(measureCount / measuresPerLine);
-  const totalHeight = lineCount * systemHeight + 40;
-
+  const baseWidth = 1180;
+  const mPerLine = Math.min(layoutMeasures, Math.max(1, mCount));
+  const mWidth = Math.floor((baseWidth - 110) / mPerLine);
+  
+  const lineCount = Math.ceil(mCount / mPerLine);
   const renderer = new vf.Renderer(host, vf.Renderer.Backends.SVG);
-  renderer.resize(pageWidth, totalHeight);
-  const context = renderer.getContext();
-  context.setFont('Arial', 10);
+  
+  // VexFlow SVG Scaling
+  renderer.resize(baseWidth * layoutScale, (lineCount * 220 + 40) * layoutScale);
+  const ctx = renderer.getContext();
+  ctx.scale(layoutScale, layoutScale);
+
+  const drawnNotes = [];
 
   for (let line = 0; line < lineCount; line++) {
-    const startMeasure = line * measuresPerLine;
-    const endMeasure = Math.min(startMeasure + measuresPerLine, measureCount);
-    const yOffset = line * systemHeight;
+    const startM = line * mPerLine; const endM = Math.min(startM + mPerLine, mCount);
+    let x = 20; const yOffset = line * 220;
+    
+    for (let m = startM; m < endM; m++) {
+      const isFirst = m === startM; const w = isFirst ? mWidth + 90 : mWidth;
+      const tS = new vf.Stave(x, 20 + yOffset, w);
+      if (isFirst) tS.addClef('treble'); if (m===0 && bpm) tS.addTimeSignature(tsStr);
+      tS.setContext(ctx).draw();
+      
+      const bS = new vf.Stave(x, 120 + yOffset, w);
+      if (isFirst) bS.addClef('bass'); if (m===0 && bpm) bS.addTimeSignature(tsStr);
+      bS.setContext(ctx).draw();
 
-    let xCursor = leftMargin;
-
-    for (let m = startMeasure; m < endMeasure; m++) {
-      const isFirstInLine = (m === startMeasure);
-      const isFirstEver = (m === 0);
-      const width = isFirstInLine ? firstMeasureWidth : measureWidth;
-
-      const trebleStave = new vf.Stave(xCursor, trebleY + yOffset, width);
-      if (isFirstInLine) trebleStave.addClef('treble');
-      if (isFirstEver && hasTimeSig) trebleStave.addTimeSignature(timeSigStr);
-      trebleStave.setContext(context).draw();
-
-      const bassStave = new vf.Stave(xCursor, bassY + yOffset, width);
-      if (isFirstInLine) bassStave.addClef('bass');
-      if (isFirstEver && hasTimeSig) bassStave.addTimeSignature(timeSigStr);
-      bassStave.setContext(context).draw();
-
-      if (isFirstInLine) {
-        new vf.StaveConnector(trebleStave, bassStave).setType(3).setContext(context).draw();
-        new vf.StaveConnector(trebleStave, bassStave).setType(1).setContext(context).draw();
+      if (isFirst) {
+        new vf.StaveConnector(tS, bS).setType(3).setContext(ctx).draw();
+        new vf.StaveConnector(tS, bS).setType(1).setContext(ctx).draw();
       }
-      new vf.StaveConnector(trebleStave, bassStave).setType(6).setContext(context).draw();
+      new vf.StaveConnector(tS, bS).setType(6).setContext(ctx).draw();
 
-      drawMeasureVoice(context, trebleStave, rightMeasures[m] || [], 'treble', hasTimeSig ? { num: numBeats, den: beatValue } : null);
-      drawMeasureVoice(context, bassStave,   leftMeasures[m]  || [], 'bass',   hasTimeSig ? { num: numBeats, den: beatValue } : null);
-
-      xCursor += width;
+      const rNotes = drawVoice(ctx, tS, rM[m]||[], 'treble', bpm?{num:numB,den}:null);
+      const lNotes = drawVoice(ctx, bS, lM[m]||[], 'bass', bpm?{num:numB,den}:null);
+      
+      (rNotes||[]).forEach((n,i) => drawnNotes.push({ note: n, h: 'right', idx: rIdx[m][i] }));
+      (lNotes||[]).forEach((n,i) => drawnNotes.push({ note: n, h: 'left', idx: lIdx[m][i] }));
+      x += w;
     }
   }
-}
 
-function drawMeasureVoice(context, stave, events, clef, timeSig) {
-  const vf = VF();
-  if (!events.length) return;
-
-  const notes = events.map(ev => makeStaveNote(ev, clef));
-  const voice = new vf.Voice({
-    num_beats: timeSig ? timeSig.num : 4,
-    beat_value: timeSig ? timeSig.den : 4
+  drawnNotes.forEach(e => {
+    const el = e.note.getSVGElement ? e.note.getSVGElement() : null;
+    if (!el) return;
+    el.classList.add('vf-stavenote');
+    el.onclick = (ev) => { ev.stopPropagation(); selectNoteInSheet(e.h, e.idx); };
+    noteElementMap.push({ el, h: e.h, idx: e.idx });
   });
-  voice.setStrict(false);
-  voice.addTickables(notes);
 
-  const formatWidth = Math.max(60, stave.getWidth() - (stave.getNoteStartX() - stave.getX()) - 20);
-  new vf.Formatter().joinVoices([voice]).format([voice], formatWidth);
-  voice.draw(context, stave);
+  if (selectedNote) restoreSelectionVisual();
 }
 
-/* ---------- Export als PNG ---------- */
-function exportPNG() {
-  const host = document.getElementById('sheetHost');
-  const svg = host.querySelector('svg');
-  if (!svg) { alert('Kein Notenblatt vorhanden.'); return; }
+function drawVoice(ctx, stave, events, clef, ts) {
+  if (!events.length) return [];
+  const vf = VF(); const notes = events.map(ev => makeStaveNote(ev, clef));
+  const v = new vf.Voice({ num_beats: ts?ts.num:4, beat_value: ts?ts.den:4 }).setStrict(false);
+  v.addTickables(notes);
+  new vf.Formatter().joinVoices([v]).format([v], Math.max(60, stave.getWidth()-40));
+  v.draw(ctx, stave);
+  return notes;
+}
 
-  const serializer = new XMLSerializer();
-  let source = serializer.serializeToString(svg);
-  if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
-    source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+/* ---------- Interaktives Editieren ---------- */
+function clearHighlights() {
+  document.querySelectorAll('.key-white.highlight, .key-black.highlight').forEach(b => b.classList.remove('highlight'));
+}
+function selectNoteInSheet(hand, idx) {
+  const ev = piece.hands[hand][idx]; if (!ev) return;
+  selectedNote = { hand, index: idx };
+  clearHighlights();
+  if (ev.type === 'note') {
+    ev.keys.forEach(k => { const b = document.querySelector(`[data-key="${k}"]`); if(b) b.classList.add('highlight'); });
+    // Scroll zur Taste
+    const btn = document.querySelector(`[data-key="${ev.keys[0]}"]`);
+    if(btn) document.getElementById('keyboardScroll').scrollTo({ left: btn.offsetLeft - 300, behavior: 'smooth' });
   }
-  const svgBlob = new Blob(['<?xml version="1.0" standalone="no"?>\r\n' + source], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(svgBlob);
+  document.querySelectorAll('.note-selected').forEach(e => e.classList.remove('note-selected'));
+  const ne = noteElementMap.find(m => m.h === hand && m.idx === idx);
+  if (ne) ne.el.classList.add('note-selected');
+  openEditPanel(ev);
+}
+function restoreSelectionVisual() {
+  if (!selectedNote) return;
+  const ev = piece.hands[selectedNote.hand][selectedNote.index];
+  if (!ev) { selectedNote = null; return; }
+  clearHighlights();
+  if (ev.type === 'note') ev.keys.forEach(k => document.querySelector(`[data-key="${k}"]`)?.classList.add('highlight'));
+  document.querySelectorAll('.note-selected').forEach(e => e.classList.remove('note-selected'));
+  const ne = noteElementMap.find(m => m.h === selectedNote.hand && m.idx === selectedNote.index);
+  if (ne) ne.el.classList.add('note-selected');
+}
 
-  const img = new Image();
-  img.onload = function () {
-    const scale = 2;
-    const w = svg.getAttribute('width') ? parseInt(svg.getAttribute('width')) : svg.clientWidth;
-    const h = svg.getAttribute('height') ? parseInt(svg.getAttribute('height')) : svg.clientHeight;
-    const canvas = document.createElement('canvas');
-    canvas.width = w * scale;
-    canvas.height = h * scale;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.scale(scale, scale);
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-    const link = document.createElement('a');
-    link.download = (document.getElementById('titleInput').value || 'notenblatt') + '.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+function openEditPanel(ev) {
+  document.getElementById('editPanel').hidden = false;
+  document.body.classList.add('editing'); // Blendet normales Eingabemenü aus
+  
+  document.getElementById('editHand').textContent = selectedNote.hand === 'right' ? 'Rechts' : 'Links';
+  document.getElementById('editIndex').textContent = (selectedNote.index + 1);
+  document.getElementById('editKeys').textContent = ev.type==='rest'?'Pause':ev.keys.map((k,i)=>getSpelling(k,ev.spellings?.[i]||'sharp').label).join(', ');
+  
+  const { duration, dots } = parseDuration(ev.duration);
+  document.getElementById('editDuration').value = duration;
+  document.getElementById('editDotted').checked = (dots === 1);
+  
+  const accList = document.getElementById('editAccidentalList'); accList.innerHTML = '';
+  document.getElementById('editAccidentalRow').style.display = 'none';
+  if (ev.type === 'note') {
+    ev.keys.forEach((k, idx) => {
+      if (!getKeyData(k).isBlack) return;
+      document.getElementById('editAccidentalRow').style.display = '';
+      const sp = getSpelling(k, ev.spellings?.[idx]||'sharp');
+      const btn = document.createElement('button');
+      btn.className = 'acc-chip' + (ev.spellings?.[idx]==='flat'?' flat':'');
+      btn.textContent = sp.label;
+      btn.onclick = () => {
+        ev.spellings[idx] = ev.spellings[idx]==='sharp'?'flat':'sharp';
+        renderSequence(); renderSheet(); autoSave(); openEditPanel(ev);
+      };
+      accList.appendChild(btn);
+    });
+  }
+}
+function closeEditPanel() {
+  document.getElementById('editPanel').hidden = true;
+  document.body.classList.remove('editing');
+  selectedNote = null; clearHighlights();
+  document.querySelectorAll('.note-selected').forEach(e => e.classList.remove('note-selected'));
+}
+function applyEditDuration() {
+  if(!selectedNote) return; const ev = piece.hands[selectedNote.hand][selectedNote.index];
+  let d = document.getElementById('editDuration').value; if(document.getElementById('editDotted').checked) d += '.d';
+  ev.duration = d; renderSequence(); renderSheet(); autoSave(); openEditPanel(ev);
+}
+function moveEvent(dir) {
+  if(!selectedNote) return; const arr = piece.hands[selectedNote.hand], i = selectedNote.index, j = i + dir;
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]]; selectedNote.index = j;
+  renderSequence(); renderSheet(); autoSave(); openEditPanel(arr[j]);
+}
+function deleteSelectedEvent() {
+  if(!selectedNote) return;
+  piece.hands[selectedNote.hand].splice(selectedNote.index, 1);
+  closeEditPanel(); renderSequence(); renderSheet(); autoSave();
+}
+
+/* ---------- Export & Save ---------- */
+function exportPNG() {
+  const svg = document.querySelector('#sheetHost svg'); if (!svg) return;
+  const src = new XMLSerializer().serializeToString(svg).replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  const img = new Image(); const url = URL.createObjectURL(new Blob([src], {type:'image/svg+xml'}));
+  img.onload = () => {
+    const c = document.createElement('canvas'); const s = 2; // High-Res
+    c.width = (parseInt(svg.getAttribute('width'))||svg.clientWidth) * s;
+    c.height = (parseInt(svg.getAttribute('height'))||svg.clientHeight) * s;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+    ctx.scale(s,s); ctx.drawImage(img,0,0); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.download = 'notenblatt.png'; a.href = c.toDataURL(); a.click();
   };
-  img.onerror = function () { alert('Export fehlgeschlagen.'); URL.revokeObjectURL(url); };
   img.src = url;
 }
-
-/* ---------- Speicher (unverändert) ---------- */
 function getStorageKey() { return 'piano_notes_pieces'; }
 function savePiece() {
-  const name = document.getElementById('saveName').value || 'Unbenannt';
+  const n = document.getElementById('saveName').value || 'Unbenannt';
   piece.title = document.getElementById('titleInput').value || piece.title;
   piece.timeSignature = document.getElementById('timeSigInput').value || piece.timeSignature;
-  const all = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-  all[name] = JSON.parse(JSON.stringify(piece));
-  localStorage.setItem(getStorageKey(), JSON.stringify(all));
-  renderSavedList();
-  alert('"' + name + '" gespeichert.');
+  const all = JSON.parse(localStorage.getItem(getStorageKey())||'{}');
+  all[n] = JSON.parse(JSON.stringify(piece)); localStorage.setItem(getStorageKey(), JSON.stringify(all));
+  renderSavedList(); alert('Gespeichert.');
 }
 function loadPiece() {
-  const name = document.getElementById('saveName').value || 'Mein Stück';
-  const all = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-  if (all[name]) {
-    piece = JSON.parse(JSON.stringify(all[name]));
-    // Migration: alte Stücke ohne spellings-Array bekommen 'sharp' als Default
-    ['right', 'left'].forEach(h => {
-      (piece.hands[h] || []).forEach(ev => {
-        if (ev.type === 'note' && !ev.spellings) {
-          ev.spellings = ev.keys.map(() => 'sharp');
-        }
-      });
-    });
-    document.getElementById('titleInput').value = piece.title || '';
-    document.getElementById('timeSigInput').value = piece.timeSignature || '';
+  const n = document.getElementById('saveName').value;
+  const all = JSON.parse(localStorage.getItem(getStorageKey())||'{}');
+  if (all[n]) {
+    piece = JSON.parse(JSON.stringify(all[n]));
+    ['right','left'].forEach(h => (piece.hands[h]||[]).forEach(e => { if(e.type==='note'&&!e.spellings) e.spellings=e.keys.map(()=>'sharp'); }));
+    document.getElementById('titleInput').value = piece.title||'';
+    document.getElementById('timeSigInput').value = piece.timeSignature||'';
     renderSequence(); renderSheet();
-  } else alert('Stück nicht gefunden: ' + name);
+  } else alert('Nicht gefunden.');
 }
-function deletePiece(name) {
-  if (!confirm('"' + name + '" wirklich löschen?')) return;
-  const all = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-  delete all[name];
-  localStorage.setItem(getStorageKey(), JSON.stringify(all));
-  renderSavedList();
+function deletePiece(n) {
+  if (!confirm('Löschen?')) return;
+  const all = JSON.parse(localStorage.getItem(getStorageKey())||'{}'); delete all[n];
+  localStorage.setItem(getStorageKey(), JSON.stringify(all)); renderSavedList();
 }
 function renderSavedList() {
-  const box = document.getElementById('savedList');
-  const all = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
-  const names = Object.keys(all);
-  box.innerHTML = '';
-  if (!names.length) return;
-  names.forEach(name => {
-    const item = document.createElement('div');
-    item.className = 'saved-item';
-    item.innerHTML = `<span>${name}</span><button class="btn-load" onclick="loadNamedPiece('${name}')">Laden</button><button class="btn-del" onclick="deletePiece('${name}')">×</button>`;
-    box.appendChild(item);
+  const b = document.getElementById('savedList'); b.innerHTML = '';
+  Object.keys(JSON.parse(localStorage.getItem(getStorageKey())||'{}')).forEach(n => {
+    const d = document.createElement('div'); d.className = 'saved-item';
+    d.innerHTML = `<span>${n}</span><button class="btn-load" onclick="document.getElementById('saveName').value='${n}';loadPiece()">Laden</button><button class="btn-del" onclick="deletePiece('${n}')">×</button>`;
+    b.appendChild(d);
   });
-}
-function loadNamedPiece(name) {
-  document.getElementById('saveName').value = name;
-  loadPiece();
 }
 function autoSave() {
-  const all = JSON.parse(localStorage.getItem(getStorageKey()) || '{}');
+  const all = JSON.parse(localStorage.getItem(getStorageKey())||'{}');
   all['Auto-Speichern'] = JSON.parse(JSON.stringify(piece));
-  localStorage.setItem(getStorageKey(), JSON.stringify(all));
-  renderSavedList();
+  localStorage.setItem(getStorageKey(), JSON.stringify(all)); renderSavedList();
 }
 
-/* ---------- Init ---------- */
 function init() {
-  buildKeyboard();
-  refreshKeyboardLabels();
-  renderSequence();
-  renderSavedList();
+  buildKeyboard(); renderSequence(); renderSavedList();
   setTimeout(renderSheet, 100);
-
-  document.getElementById('keyboard').addEventListener('dblclick', (e) => {
-    const btn = e.target.closest('.key-white, .key-black');
-    if (!btn) return;
-    const item = MAP_88[parseInt(btn.dataset.key) - 1];
-    if (!item) return;
-    selectedKeys.clear();
-    selectedKeys.add(item.keyNum);
-    addNote();
-  });
-
-  document.getElementById('timeSigInput').addEventListener('change', renderSheet);
+  document.getElementById('keyboard').ondblclick = (e) => {
+    const b = e.target.closest('.key-white, .key-black'); if(!b) return;
+    const i = MAP_88[parseInt(b.dataset.key)-1]; if(!i) return;
+    selectedKeys.clear(); selectedKeys.add(i.keyNum); addNote();
+  };
+  document.getElementById('timeSigInput').onchange = renderSheet;
 }
 window.addEventListener('DOMContentLoaded', init);
