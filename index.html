@@ -91,11 +91,12 @@
     </select>
   </div>
   
-  <div class="duration-bar" style="border-bottom:none; padding-bottom:0;">
-    <button onclick="addNote()" class="btn-add">Note / Akkord hinzufügen</button>
-    <button onclick="addRest()" class="btn-add btn-secondary">Pause einfügen</button>
+  <div class="duration-bar" style="border-bottom:none; padding-bottom:0; gap:8px;">
+    <button onclick="addNote()" class="btn-add">Hinzufügen</button>
+    <button onclick="addRest()" class="btn-add btn-secondary">Pause</button>
     <button onclick="undoLast()" class="btn-secondary">Letztes entfernen</button>
-    <button onclick="duplicateMeasurePrompt()" class="btn-secondary">Takt duplizieren...</button>
+    <button onclick="duplicateLastNPrompt()" class="btn-secondary">Letzte X kopieren...</button>
+    <button onclick="duplicateMeasurePrompt()" class="btn-secondary">Takt kopieren...</button>
     <button onclick="clearHand()" class="btn-danger" style="margin-left:auto;">Spur leeren</button>
   </div>
 
