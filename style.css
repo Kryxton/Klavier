@@ -147,3 +147,8 @@ footer { text-align: center; padding: 30px 20px 20px; color: var(--text-subtle);
   .keyboard-section { padding: 10px; }
   .keyboard { height: 160px; }
 }
+
+.edit-panel { position: sticky; top: 8px; z-index: 40; max-height: 70vh; overflow-y: auto; }
+.duration-bar input[type="number"] { padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-deep); color: var(--text-main); }
+button { touch-action: manipulation; }
+
