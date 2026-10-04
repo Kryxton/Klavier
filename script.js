@@ -5,7 +5,7 @@ let piece = {
   hands: { right: [], left: [] }
 };
 
-// Einstellungs-Speicher für Hände (damit links & rechts eigene Längen behalten)
+// Einstellungs-Speicher für Hände
 let handSettings = {
   right: { dur: 'q', dotted: false },
   left:  { dur: 'w', dotted: false }
@@ -53,13 +53,12 @@ function getSpelling(keyNum, spelling) {
   return (!d.isBlack || spelling !== 'flat') ? d.sharp : d.flat;
 }
 
-/* ---------- Klaviatur bauen (Absolute Positionen) ---------- */
+/* ---------- Klaviatur bauen ---------- */
 function buildKeyboard() {
   const container = document.getElementById('keyboard');
   container.innerHTML = '';
   let whiteIndex = 0;
   
-  // Weiße Tasten
   MAP_88.forEach(item => {
     if (item.isBlack) return;
     const btn = document.createElement('button');
@@ -71,13 +70,12 @@ function buildKeyboard() {
     whiteIndex++;
   });
   
-  // Schwarze Tasten
   MAP_88.forEach(item => {
     if (!item.isBlack) return;
     const btn = document.createElement('button');
     btn.className = 'key-black'; btn.dataset.key = item.keyNum;
     const whiteBefore = MAP_88.slice(0, item.keyNum - 1).filter(s => !s.isBlack).length;
-    btn.style.left = (whiteBefore * 30 - 10) + 'px'; // -10 = halbe Breite der schwarzen Taste (20)
+    btn.style.left = (whiteBefore * 30 - 10) + 'px'; 
     btn.innerHTML = `<span class="key-num">${item.keyNum}</span><span class="key-note">${accidentalMode==='flat'?item.flat.label:item.sharp.label}</span>`;
     btn.onclick = () => handleKeyClick(item);
     btn.oncontextmenu = (e) => { e.preventDefault(); toggleKeyAccidental(item); };
@@ -118,7 +116,7 @@ function updateSelectionVisual() {
   });
 }
 
-/* ---------- Eingabe & Hand-Wechsel ---------- */
+/* ---------- Eingabe & Kopieren ---------- */
 function onDurationChange() {
   handSettings[currentHand].dur = document.getElementById('durationSelect').value;
   handSettings[currentHand].dotted = document.getElementById('dottedCheck').checked;
@@ -133,7 +131,6 @@ function switchHand(hand) {
   document.querySelectorAll('.hand-btn').forEach(b => b.classList.toggle('active', b.dataset.hand === hand));
   document.getElementById('currentHandLabel').textContent = hand === 'right' ? 'Rechte Hand' : 'Linke Hand';
   
-  // Gespeicherte Notenlänge für diese Hand wiederherstellen
   document.getElementById('durationSelect').value = handSettings[hand].dur;
   document.getElementById('dottedCheck').checked = handSettings[hand].dotted;
   
@@ -165,14 +162,28 @@ function removeEvent(i) {
   renderSequence(); renderSheet(); autoSave();
 }
 
-// Takt duplizieren
+// NEU: Letzte X Elemente kopieren
+function duplicateLastNPrompt() {
+  const m = prompt("Wie viele der letzen Noten/Pausen sollen in dieser Spur nochmal kopiert werden?");
+  if (!m) return;
+  const num = parseInt(m);
+  if (isNaN(num) || num < 1) return alert("Bitte eine gültige Zahl eingeben.");
+  
+  const arr = piece.hands[currentHand];
+  if (num > arr.length) return alert("Es gibt noch keine " + num + " Elemente in dieser Spur.");
+  
+  const toCopy = arr.slice(arr.length - num);
+  piece.hands[currentHand].push(...JSON.parse(JSON.stringify(toCopy))); // Tiefe Kopie
+  renderSequence(); renderSheet(); autoSave();
+}
+
+// NEU: Ganzen Takt kopieren
 function duplicateMeasurePrompt() {
-  const m = prompt("Welchen Takt möchtest du in die " + (currentHand==='right'?'Rechte':'Linke') + " Hand kopieren (als neuen Takt ans Ende hängen)?\nGib eine Taktnummer ein (1, 2, ...):");
+  const m = prompt("Welchen Takt möchtest du ans Ende kopieren?\n(Gib eine Taktnummer ein, z.B. 1, 2, ...):");
   if (!m) return;
   const num = parseInt(m);
   if (isNaN(num) || num < 1) return alert("Ungültige Taktnummer.");
   
-  // Taktart bestimmen für korrekte Gruppierung
   const ts = document.getElementById('timeSigInput').value || '4/4';
   let beats = null;
   if (/^\d+\/\d+$/.test(ts)) {
@@ -181,7 +192,7 @@ function duplicateMeasurePrompt() {
   }
   
   const measures = groupIntoMeasures(piece.hands[currentHand], beats);
-  if (num > measures.length) return alert("Takt " + num + " existiert in dieser Hand nicht.");
+  if (num > measures.length) return alert("Takt " + num + " existiert nicht.");
   
   const toCopy = JSON.parse(JSON.stringify(measures[num - 1]));
   piece.hands[currentHand].push(...toCopy);
@@ -207,7 +218,7 @@ function renderSequence() {
 }
 
 /* ============================================================
-   VexFlow & Edit-Logik
+   VexFlow & Edit-Logik (Dynamische Breite & Beaming)
    ============================================================ */
 function VF() { return window.Vex.Flow || window.VexFlow; }
 function parseDuration(d) { return { duration: d.replace('.d',''), dots: d.endsWith('.d')?1:0 }; }
@@ -267,33 +278,51 @@ function renderSheet() {
 
   const baseWidth = 1180;
   const mPerLine = Math.min(layoutMeasures, Math.max(1, mCount));
-  const mWidth = Math.floor((baseWidth - 110) / mPerLine);
-  
   const lineCount = Math.ceil(mCount / mPerLine);
-  const renderer = new vf.Renderer(host, vf.Renderer.Backends.SVG);
   
-  // VexFlow SVG Scaling
+  const renderer = new vf.Renderer(host, vf.Renderer.Backends.SVG);
   renderer.resize(baseWidth * layoutScale, (lineCount * 220 + 40) * layoutScale);
   const ctx = renderer.getContext();
   ctx.scale(layoutScale, layoutScale);
 
   const drawnNotes = [];
 
+  // NEU: Dynamische Breitenberechnung
   for (let line = 0; line < lineCount; line++) {
-    const startM = line * mPerLine; const endM = Math.min(startM + mPerLine, mCount);
-    let x = 20; const yOffset = line * 220;
+    const startM = line * mPerLine; 
+    const endM = Math.min(startM + mPerLine, mCount);
+    let yOffset = line * 220;
     
+    // Berechne das "Gewicht" (Anzahl der Töne) der Takte für diese Zeile
+    let lineMeasuresInfo = [];
+    let totalWeight = 0;
     for (let m = startM; m < endM; m++) {
-      const isFirst = m === startM; const w = isFirst ? mWidth + 90 : mWidth;
-      const tS = new vf.Stave(x, 20 + yOffset, w);
-      if (isFirst) tS.addClef('treble'); if (m===0 && bpm) tS.addTimeSignature(tsStr);
+      const rW = rM[m] ? rM[m].length : 0;
+      const lW = lM[m] ? lM[m].length : 0;
+      const weight = Math.max(rW, lW, 2); // Mindestens Gewicht 2, damit leere Takte nicht verschwinden
+      lineMeasuresInfo.push({ m, weight });
+      totalWeight += weight;
+    }
+    
+    // 90px für den allerersten Takt reserviert (Schlüssel & Taktart)
+    const availableForNotes = baseWidth - 40 - 90; 
+    let xCursor = 20;
+
+    for (let i = 0; i < lineMeasuresInfo.length; i++) {
+      const { m, weight } = lineMeasuresInfo[i];
+      const isFirstInLine = (i === 0);
+      const clefSpace = isFirstInLine ? 90 : 0;
+      const w = Math.floor(availableForNotes * (weight / totalWeight)) + clefSpace;
+      
+      const tS = new vf.Stave(xCursor, 20 + yOffset, w);
+      if (isFirstInLine) tS.addClef('treble'); if (m===0 && bpm) tS.addTimeSignature(tsStr);
       tS.setContext(ctx).draw();
       
-      const bS = new vf.Stave(x, 120 + yOffset, w);
-      if (isFirst) bS.addClef('bass'); if (m===0 && bpm) bS.addTimeSignature(tsStr);
+      const bS = new vf.Stave(xCursor, 120 + yOffset, w);
+      if (isFirstInLine) bS.addClef('bass'); if (m===0 && bpm) bS.addTimeSignature(tsStr);
       bS.setContext(ctx).draw();
 
-      if (isFirst) {
+      if (isFirstInLine) {
         new vf.StaveConnector(tS, bS).setType(3).setContext(ctx).draw();
         new vf.StaveConnector(tS, bS).setType(1).setContext(ctx).draw();
       }
@@ -302,9 +331,10 @@ function renderSheet() {
       const rNotes = drawVoice(ctx, tS, rM[m]||[], 'treble', bpm?{num:numB,den}:null);
       const lNotes = drawVoice(ctx, bS, lM[m]||[], 'bass', bpm?{num:numB,den}:null);
       
-      (rNotes||[]).forEach((n,i) => drawnNotes.push({ note: n, h: 'right', idx: rIdx[m][i] }));
-      (lNotes||[]).forEach((n,i) => drawnNotes.push({ note: n, h: 'left', idx: lIdx[m][i] }));
-      x += w;
+      (rNotes||[]).forEach((n,idx) => drawnNotes.push({ note: n, h: 'right', idx: rIdx[m][idx] }));
+      (lNotes||[]).forEach((n,idx) => drawnNotes.push({ note: n, h: 'left', idx: lIdx[m][idx] }));
+      
+      xCursor += w;
     }
   }
 
@@ -321,11 +351,21 @@ function renderSheet() {
 
 function drawVoice(ctx, stave, events, clef, ts) {
   if (!events.length) return [];
-  const vf = VF(); const notes = events.map(ev => makeStaveNote(ev, clef));
+  const vf = VF(); 
+  const notes = events.map(ev => makeStaveNote(ev, clef));
   const v = new vf.Voice({ num_beats: ts?ts.num:4, beat_value: ts?ts.den:4 }).setStrict(false);
   v.addTickables(notes);
   new vf.Formatter().joinVoices([v]).format([v], Math.max(60, stave.getWidth()-40));
   v.draw(ctx, stave);
+  
+  // NEU: Auto-Beaming (Fähnchen verbinden)
+  try {
+    const beams = vf.Beam.generateBeams(notes);
+    beams.forEach(b => b.setContext(ctx).draw());
+  } catch(e) { 
+    // Falsche Taktarten ignorieren wir fürs Beaming leise
+  }
+  
   return notes;
 }
 
@@ -339,7 +379,6 @@ function selectNoteInSheet(hand, idx) {
   clearHighlights();
   if (ev.type === 'note') {
     ev.keys.forEach(k => { const b = document.querySelector(`[data-key="${k}"]`); if(b) b.classList.add('highlight'); });
-    // Scroll zur Taste
     const btn = document.querySelector(`[data-key="${ev.keys[0]}"]`);
     if(btn) document.getElementById('keyboardScroll').scrollTo({ left: btn.offsetLeft - 300, behavior: 'smooth' });
   }
@@ -361,7 +400,7 @@ function restoreSelectionVisual() {
 
 function openEditPanel(ev) {
   document.getElementById('editPanel').hidden = false;
-  document.body.classList.add('editing'); // Blendet normales Eingabemenü aus
+  document.body.classList.add('editing'); 
   
   document.getElementById('editHand').textContent = selectedNote.hand === 'right' ? 'Rechts' : 'Links';
   document.getElementById('editIndex').textContent = (selectedNote.index + 1);
