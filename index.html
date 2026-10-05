@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;1,9..40,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.3/build/cjs/vexflow.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
 </head>
 <body>
 
@@ -134,9 +135,22 @@
 <section class="settings-bar" aria-label="Einstellungen">
   <label>Titel: <input type="text" id="titleInput" value="Mein Stück"></label>
   <label>Taktart: <input type="text" id="timeSigInput" value="4/4" placeholder="4/4" style="width:70px;"></label>
+  <label>Tonart: <select id="keySigSelect" onchange="renderSheet()"></select></label>
   <label>Takte pro Zeile: <input type="number" id="layoutMeasures" value="4" min="1" max="10" onchange="renderSheet()" style="width:60px;"></label>
   <label>Größe (%): <input type="number" id="layoutScale" value="100" min="50" max="200" step="10" onchange="renderSheet()" style="width:70px;"></label>
   <label><input type="checkbox" id="autoBeam" onchange="renderSheet()"> Achtel/Sechzehntel automatisch verbinden</label>
+</section>
+
+<section class="settings-bar" aria-label="Wiedergabe">
+  <button id="playBtn" onclick="togglePlay()" class="btn-primary">▶ Abspielen</button>
+  <label>Tempo (BPM): <input type="number" id="bpmInput" value="100" min="30" max="240" style="width:70px;"></label>
+  <label>Klang:
+    <select id="engineSelect" onchange="onEngineChange()">
+      <option value="synth" selected>Synth (offline)</option>
+      <option value="samples">Klavier-Samples (online)</option>
+    </select>
+  </label>
+  <span id="playStatus" class="edit-label"></span>
 </section>
 
 <section class="sheet-section" aria-label="Notenblatt">
