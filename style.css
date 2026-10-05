@@ -152,3 +152,8 @@ footer { text-align: center; padding: 30px 20px 20px; color: var(--text-subtle);
 .duration-bar input[type="number"] { padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-deep); color: var(--text-main); }
 button { touch-action: manipulation; }
 
+.settings-bar select { padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border-subtle); background: var(--bg-deep); color: var(--text-main); }
+.btn-primary { padding: 8px 16px; border: 1px solid transparent; border-radius: 7px; font-family: inherit; font-size: 0.82rem; cursor: pointer; background: linear-gradient(135deg, #c9a84c, #a6843e); color: #0f0b18; font-weight: 600; }
+.btn-primary:disabled { opacity: 0.5; }
+
+
