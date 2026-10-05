@@ -85,6 +85,7 @@ function onAccidentalModeChange() {
   refreshKeyboardLabels();
 }
 function handleKeyClick(item) {
+  sound(item.midi, 0.5);
   if (selectedNote) { editKeyClick(item); return; }   // Bearbeitungsmodus
   if (selectedKeys.has(item.keyNum)) { selectedKeys.delete(item.keyNum); selectedAccidentals.delete(item.keyNum); }
   else selectedKeys.add(item.keyNum);
@@ -208,7 +209,8 @@ function groupIntoMeasures(events, bpm) {
 }
 function buildIndexMap(measures) { let c = 0; return measures.map(m => m.map(() => c++)); }
 
-function makeStaveNote(ev, clef) {
+function makeStaveNote(ev, clef, st) {
+  st = st || {};
   const vf = VF(); const { duration, dots } = parseDuration(ev.duration);
   if (ev.type === 'rest') {
     const note = new vf.StaveNote({ clef, keys: [clef === 'treble' ? 'b/4' : 'd/3'], duration: duration + 'r' });
@@ -219,7 +221,8 @@ function makeStaveNote(ev, clef) {
   const vexKeys = [], acc = [];
   pairs.forEach((p, i) => {
     const s = getSpelling(p.k, p.sp); vexKeys.push(s.vexKey);
-    if (s.accidental) acc.push({ i, a: s.accidental });
+    const a = needAccidental(s, st);
+    if (a) acc.push({ i, a });
   });
   const note = new vf.StaveNote({ clef, keys: vexKeys, duration });
   acc.forEach(x => note.addModifier(new vf.Accidental(x.a), x.i));
@@ -237,7 +240,8 @@ function makeVoice(notes, ts) {
 function minWidth(events, clef, ts) {
   if (!events.length) return 0;
   const vf = VF();
-  const notes = events.map(e => makeStaveNote(e, clef));
+  const st = {};
+  const notes = events.map(e => makeStaveNote(e, clef, st));
   const v = makeVoice(notes, ts);
   try { return new vf.Formatter().joinVoices([v]).preCalculateMinTotalWidth([v]); }
   catch (e) { return notes.length * 45; }
@@ -260,7 +264,8 @@ function manualBeams(events, notes) {
 function drawVoice(ctx, stave, events, clef, ts, autoBeam) {
   if (!events.length) return [];
   const vf = VF();
-  const notes = events.map(ev => makeStaveNote(ev, clef));
+  const st = {};
+  const notes = events.map(ev => makeStaveNote(ev, clef, st));
   const v = makeVoice(notes, ts);
   new vf.Formatter().joinVoices([v]).format([v], Math.max(60, stave.getNoteEndX() - stave.getNoteStartX() - 12));
   const beams = autoBeam ? vf.Beam.generateBeams(notes) : manualBeams(events, notes);
@@ -274,6 +279,7 @@ function renderSheet() {
   const host = $('sheetHost');
   if (!vf) { host.textContent = 'VexFlow konnte nicht geladen werden. Bitte Internetverbindung prüfen.'; return; }
   host.innerHTML = ''; noteElementMap = [];
+  const ki = updateKeyMap();
 
   const tsStr = ($('timeSigInput').value || '').trim();
   let bpm = null, numB = 4, den = 4;
@@ -298,7 +304,7 @@ function renderSheet() {
   const widths = [];
   for (let m = 0; m < mCount; m++) {
     const need = Math.max(minWidth(rM[m] || [], 'treble', ts), minWidth(lM[m] || [], 'bass', ts));
-    const prefix = (m % mPerLine === 0) ? (m === 0 && bpm ? 90 : 60) : 0;
+    const prefix = (m % mPerLine === 0) ? (m === 0 && bpm ? 90 : 60) + ki.n * 14 : 0;
     widths.push(Math.max(baseM, need + 40) + prefix);
   }
   let maxLine = 0;
@@ -320,11 +326,11 @@ function renderSheet() {
     for (let m = startM; m < endM; m++) {
       const isFirst = m === startM, w = widths[m];
       const tS = new vf.Stave(x, 20 + yOff, w);
-      if (isFirst) tS.addClef('treble');
+      if (isFirst) { tS.addClef('treble'); if (ki.n) tS.addKeySignature(ki.spec); }
       if (m === 0 && bpm) tS.addTimeSignature(tsStr);
       tS.setContext(ctx).draw();
       const bS = new vf.Stave(x, 120 + yOff, w);
-      if (isFirst) bS.addClef('bass');
+      if (isFirst) { bS.addClef('bass'); if (ki.n) bS.addKeySignature(ki.spec); }
       if (m === 0 && bpm) bS.addTimeSignature(tsStr);
       bS.setContext(ctx).draw();
 
@@ -483,8 +489,7 @@ function loadAll() { try { return JSON.parse(localStorage.getItem(getStorageKey(
 function saveAll(all) { try { localStorage.setItem(getStorageKey(), JSON.stringify(all)); } catch (e) { console.warn('Speichern fehlgeschlagen', e); } }
 function savePiece() {
   const n = $('saveName').value || 'Unbenannt';
-  piece.title = $('titleInput').value || piece.title;
-  piece.timeSignature = $('timeSigInput').value || piece.timeSignature;
+  syncMeta();
   const all = loadAll();
   all[n] = JSON.parse(JSON.stringify(piece)); saveAll(all);
   renderSavedList(); alert('Gespeichert.');
@@ -499,6 +504,7 @@ function loadPiece() {
   closeEditPanel();
   $('titleInput').value = piece.title || '';
   $('timeSigInput').value = piece.timeSignature || '';
+  $('keySigSelect').value = piece.keySignature || 'C';
   renderSequence(); renderSheet();
 }
 function deletePiece(n) {
@@ -518,12 +524,161 @@ function renderSavedList() {
   });
 }
 function autoSave() {
+  syncMeta();
   const all = loadAll();
   all['Auto-Speichern'] = JSON.parse(JSON.stringify(piece)); saveAll(all); renderSavedList();
 }
 
+/* ---------- Tonart & Vorzeichen ---------- */
+const KEY_LIST = [
+  ['C', 0, 'C-Dur / a-Moll'], ['G', 1, 'G-Dur (1♯)'], ['D', 2, 'D-Dur (2♯)'], ['A', 3, 'A-Dur (3♯)'],
+  ['E', 4, 'E-Dur (4♯)'], ['B', 5, 'H-Dur (5♯)'], ['F#', 6, 'Fis-Dur (6♯)'], ['C#', 7, 'Cis-Dur (7♯)'],
+  ['F', -1, 'F-Dur (1♭)'], ['Bb', -2, 'B-Dur (2♭)'], ['Eb', -3, 'Es-Dur (3♭)'], ['Ab', -4, 'As-Dur (4♭)'],
+  ['Db', -5, 'Des-Dur (5♭)'], ['Gb', -6, 'Ges-Dur (6♭)'], ['Cb', -7, 'Ces-Dur (7♭)']
+];
+let keyMap = {};
+function buildKeySelect() {
+  $('keySigSelect').innerHTML = KEY_LIST.map(k => `<option value="${k[0]}">${k[2]}</option>`).join('');
+}
+function updateKeyMap() {
+  const spec = $('keySigSelect').value || 'C';
+  const n = (KEY_LIST.find(k => k[0] === spec) || KEY_LIST[0])[1];
+  keyMap = {};
+  if (n > 0) 'fcgdaeb'.slice(0, n).split('').forEach(l => keyMap[l] = '#');
+  if (n < 0) 'beadgcf'.slice(0, -n).split('').forEach(l => keyMap[l] = 'b');
+  return { spec, n: Math.abs(n) };
+}
+// Vorzeichen nur zeigen, wenn die Tonart bzw. ein früheres Vorzeichen im Takt es nicht schon vorgibt
+function needAccidental(s, st) {
+  const id = s.vexKey, want = s.accidental || '';
+  const cur = id in st ? st[id] : (keyMap[id[0]] || '');
+  if (want === cur) return null;
+  st[id] = want;
+  return want || 'n';   // 'n' = Auflösungszeichen
+}
+function syncMeta() {
+  piece.title = $('titleInput').value || piece.title;
+  piece.timeSignature = $('timeSigInput').value || piece.timeSignature;
+  piece.keySignature = $('keySigSelect').value || 'C';
+}
+
+/* ---------- Wiedergabe ---------- */
+let actx = null, master = null, sampler = null, samplerReady = false, samplerLoading = null;
+let playing = false, playTimers = [];
+function setStatus(t) { $('playStatus').textContent = t; }
+function getBeatsPerMeasure() {
+  const ts = ($('timeSigInput').value || '').trim();
+  if (!/^\d+\/\d+$/.test(ts)) return null;
+  const p = ts.split('/').map(Number); return p[0] * (4 / p[1]);
+}
+function getCtx() {
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function synthNote(midi, dur) {
+  const c = getCtx();
+  if (!master) { master = c.createGain(); master.gain.value = 0.5; master.connect(c.destination); }
+  const t = c.currentTime, f = 440 * Math.pow(2, (midi - 69) / 12), d = Math.max(dur, 0.15);
+  const g = c.createGain(); g.connect(master);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.3, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.08, t + d);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.25);
+  [['triangle', 1, 1], ['sine', 2, 0.3]].forEach(([type, mul, vol]) => {
+    const o = c.createOscillator(), og = c.createGain();
+    o.type = type; o.frequency.value = f * mul; og.gain.value = vol;
+    o.connect(og); og.connect(g); o.start(t); o.stop(t + d + 0.3);
+  });
+}
+function sound(midi, dur) {
+  try {
+    if ($('engineSelect').value === 'samples' && samplerReady) sampler.triggerAttackRelease(Tone.Frequency(midi, 'midi').toNote(), dur);
+    else synthNote(midi, dur);
+  } catch (e) { console.warn(e); }
+}
+function ensureSampler() {
+  if (samplerReady) return Promise.resolve(true);
+  if (!window.Tone) { setStatus('Tone.js nicht geladen.'); return Promise.resolve(false); }
+  if (samplerLoading) return samplerLoading;
+  setStatus('Lade Klavier-Samples…');
+  samplerLoading = new Promise(res => {
+    const timer = setTimeout(() => { samplerLoading = null; res(false); }, 25000);
+    const urls = { A0: 'A0.mp3', C8: 'C8.mp3' };
+    for (let o = 1; o <= 7; o++) {
+      urls['C' + o] = 'C' + o + '.mp3'; urls['D#' + o] = 'Ds' + o + '.mp3';
+      urls['F#' + o] = 'Fs' + o + '.mp3'; urls['A' + o] = 'A' + o + '.mp3';
+    }
+    sampler = new Tone.Sampler({
+      urls, release: 1, baseUrl: 'https://tonejs.github.io/audio/salamander/',
+      onload: () => { clearTimeout(timer); samplerReady = true; setStatus('Klavier bereit.'); res(true); }
+    }).toDestination();
+  });
+  return samplerLoading;
+}
+async function onEngineChange() {
+  setStatus('');
+  if ($('engineSelect').value !== 'samples') return;
+  try { if (window.Tone) await Tone.start(); } catch (e) {}
+  if (!(await ensureSampler())) { $('engineSelect').value = 'synth'; setStatus('Samples nicht verfügbar – Synth aktiv.'); }
+}
+function buildTimeline() {
+  const bpm = getBeatsPerMeasure(), out = [];
+  ['right', 'left'].forEach(h => {
+    let idx = 0, cursor = 0;
+    groupIntoMeasures(piece.hands[h], bpm).forEach((m, mi) => {
+      let t = bpm ? mi * bpm : cursor;
+      m.forEach(ev => {
+        const b = eventBeats(ev);
+        if (ev.type === 'note') out.push({ h, i: idx, t, b, keys: ev.keys });
+        idx++; t += b;
+      });
+      cursor = t;
+    });
+  });
+  return out;
+}
+function markPlaying(e, on) {
+  const ne = noteElementMap.find(m => m.h === e.h && m.idx === e.i);
+  if (ne) ne.el.classList.toggle('note-selected', on);
+  e.keys.forEach(k => document.querySelector(`[data-key="${k}"]`)?.classList.toggle('highlight', on));
+}
+function stopPlay() {
+  playTimers.forEach(clearTimeout); playTimers = []; playing = false;
+  $('playBtn').textContent = '▶ Abspielen';
+  if (sampler && samplerReady) sampler.releaseAll();
+  if (master) { master.disconnect(); master = null; }
+  document.querySelectorAll('.note-selected').forEach(e => e.classList.remove('note-selected'));
+  clearHighlights();
+  if (selectedNote) restoreSelectionVisual();
+}
+async function togglePlay() {
+  if (playing) return stopPlay();
+  const tl = buildTimeline();
+  if (!tl.length) { alert('Es gibt noch nichts zum Abspielen.'); return; }
+  const btn = $('playBtn'); btn.disabled = true;
+  try {
+    if (window.Tone) await Tone.start();
+    getCtx();
+    if ($('engineSelect').value === 'samples' && !(await ensureSampler())) {
+      $('engineSelect').value = 'synth'; setStatus('Samples nicht verfügbar – Synth aktiv.');
+    }
+  } catch (e) { console.warn(e); }
+  btn.disabled = false;
+  const spb = 60 / (parseInt($('bpmInput').value) || 100);
+  playing = true; btn.textContent = '⏹ Stopp';
+  let end = 0;
+  tl.forEach(e => {
+    const start = e.t * spb * 1000, dur = e.b * spb;
+    end = Math.max(end, start + dur * 1000);
+    playTimers.push(setTimeout(() => { e.keys.forEach(k => sound(getKeyData(k).midi, dur * 0.95)); markPlaying(e, true); }, start));
+    playTimers.push(setTimeout(() => markPlaying(e, false), start + dur * 1000));
+  });
+  playTimers.push(setTimeout(stopPlay, end + 300));
+}
+
 function init() {
-  buildKeyboard(); renderSequence(); renderSavedList();
+  buildKeySelect(); buildKeyboard(); renderSequence(); renderSavedList();
   setTimeout(renderSheet, 100);
   $('keyboard').ondblclick = e => {
     if (selectedNote) return;
