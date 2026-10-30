@@ -11,18 +11,13 @@ are easier and sound nicer. No piano connected so far, only the screen. So the s
 piece down from such a video, then practise it (falling notes like the video, or the score; slower,
 one hand, bars in a loop). Only for the user (decided 2026-10-30), with cloud sync still to come.
 
-## ⚠️ Hosting: don't merge into `main` yet
-- The **old site** (three files, no build) is live on GitHub Pages at
-  `kryxton.github.io/Klavier`, built from the root of `main`. The usual fast-forward into `main`
-  would replace it with unbuilt source and break it.
-- Pieces saved there are in that browser's localStorage (key `piano_notes_pieces`, format `{ name:
-  { title, timeSignature, keySignature, hands: { right: [{ type, keys, spellings, duration }] } } }`,
-  `keys` = key number 1–88, so MIDI = key + 20). The old site has no export.
-- Branch `alter-editor` = the old site, unchanged. Before merging the rebuild: push it, point Pages
-  at it (same URL, so its pieces stay reachable), and connect the repo to Vercel (`vercel.json` is
-  ready; the content security policy allows the samples on tonejs.github.io).
-- A different origin can't read the old pieces. Only needed if the user wants them: small export
-  button on `alter-editor`, plus an import that converts the format above.
+## Hosting
+- The rebuild was merged into `main` on 2026-10-30; the user said the old site and its pieces don't
+  need keeping. Branch `alter-editor` = the old site, unchanged (don't delete).
+- GitHub Pages (`kryxton.github.io/Klavier`) still serves the root of `main`, which is unbuilt source
+  now, so it no longer shows the app. Real hosting = Vercel like Life OS: the user connects the repo
+  (`vercel.json` is ready; its content security policy allows the samples on tonejs.github.io), then
+  push to `main` = live, and Pages can be switched off.
 
 ## Stack (same as Latein, no Supabase yet)
 React 19 + TypeScript + Vite (single file) + Tailwind 4, lucide-react, Vitest. VexFlow 4 for the
@@ -59,7 +54,7 @@ headless Chrome driven over the DevTools protocol (see Latein's CLAUDE.md), real
 Long heredocs in the Bash tool break: write scripts to the scratchpad.
 
 ## Open
-- Hosting, see above. Then cloud sync (same Supabase project, own table, SQL file the user runs).
+- Vercel, see Hosting. Then cloud sync (same Supabase project, own table, SQL file the user runs).
 - Next for typing out videos: the YouTube video inside the Write page (slow, loop, step). Reading
   the notes out of a video automatically can't work on an embedded video (the browser doesn't give
   its pixels to the page).
