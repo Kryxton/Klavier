@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* All colors of the app, so the look is one block of variables */
+@theme {
+  --color-ink: #0a080f;
+  --color-card: #12101a;
+  --color-paper: #f8f4e8;
+  --color-line: rgba(201, 168, 76, 0.2);
+  --color-text: #f2ebe0;
+  --color-dim: #a8a090;
+  --color-accent: #c9a84c;
+  --color-accent-light: #e8cc7a;
+  --color-on-accent: #0f0b18;
+  --color-danger: #c07060;
+  --font-serif: Georgia, "Times New Roman", serif;
+}
+
+html {
+  background: var(--color-ink);
+  /* Stop iOS from enlarging text on rotation */
+  -webkit-text-size-adjust: 100%;
+  /* No double-tap zoom, so quick taps on keys all count */
+  touch-action: manipulation;
+}
+
+body {
+  /* No grey flash when tapping buttons on iOS */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* A tap shows at once (the tap highlight is off above) */
+button:active:not(:disabled) {
+  opacity: 0.7;
+}
+
+/* iOS zooms into any input with a font size below 16px; unlayered so it beats utility classes */
+input,
+textarea,
+select {
+  font-size: max(16px, 1em);
+}
+
+/* The keyboard scrolls with the arrows or a swipe, a scrollbar would only cover the keys */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Bar numbers are typed; the little arrows would take the room of the digits */
+input[type="number"] {
+  appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+}
+
+/* The score: VexFlow draws with fill and stroke on each part of a note */
+.sheet svg {
+  display: block;
+  margin: 0 auto;
+}
+.sheet .note-selected,
+.sheet .note-selected * {
+  fill: #a8791c;
+  stroke: #a8791c;
+}
+.sheet .note-playing,
+.sheet .note-playing * {
+  fill: #2f6aa3;
+  stroke: #2f6aa3;
+}
