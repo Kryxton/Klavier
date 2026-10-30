@@ -98,6 +98,9 @@ const whitesBelow = (midi: number) => {
   return count;
 };
 
+// A key's place along the keyboard, counted in white keys from A0
+export const keyPosition = whitesBelow;
+
 export function keyBox(midi: number, low: number, high: number) {
   const whites = whitesBelow(high + 1) - whitesBelow(low);
   const unit = 1 / whites;

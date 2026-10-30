@@ -51,14 +51,12 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
         data-key={midi}
         className={cn(
           'absolute top-0 flex items-end justify-center select-none',
-          black ? 'z-10 h-[60%] rounded-b-sm bg-gradient-to-b from-[#2a2018] to-[#0a0704] shadow-[0_3px_6px_rgba(0,0,0,0.6)]'
-            : 'h-full rounded-b-sm border-r border-[#9a8a6e] bg-gradient-to-b from-[#f5efe8] to-[#d8cfba]',
-          on && (black ? 'from-accent to-[#7a6028]' : 'from-[#ffe8a8] to-accent'),
-          sounding && (black ? 'from-[#7fb4e6] to-[#2f6aa3]' : 'from-[#cfe4f7] to-[#7fb4e6]'),
+          black ? 'z-10 h-[62%] bg-ink' : 'h-full border-r border-ink/25 bg-paper',
+          (on || sounding) && 'bg-accent',
         )}
         style={{ left: `${box.left * 100}%`, width: `${box.width * 100}%` }}
       >
-        {showName && <span className="pb-1 text-[10px] leading-none text-[#5a4e35] pointer-events-none">{name}</span>}
+        {showName && <span className="pb-1.5 text-[9px] leading-none tracking-wider text-ink/50 pointer-events-none">{name}</span>}
       </button>
     );
   };
@@ -73,12 +71,12 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
 
   return (
     <div className={cn('relative shrink-0 flex bg-ink', className)}>
-      <button type="button" aria-label="Eine Oktave tiefer" onClick={() => scrollBy(-OCTAVE)} className="w-8 shrink-0 flex items-center justify-center text-dim border-r border-line">
-        <ChevronLeft className="w-5 h-5" />
+      <button type="button" aria-label="Eine Oktave tiefer" onClick={() => scrollBy(-OCTAVE)} className="w-8 shrink-0 flex items-center justify-center text-dim">
+        <ChevronLeft className="w-4 h-4" strokeWidth={1.25} />
       </button>
       <div ref={scroller} data-testid="keys" className="no-scrollbar flex-1 min-w-0 overflow-x-auto overflow-y-hidden">{board}</div>
-      <button type="button" aria-label="Eine Oktave höher" onClick={() => scrollBy(OCTAVE)} className="w-8 shrink-0 flex items-center justify-center text-dim border-l border-line">
-        <ChevronRight className="w-5 h-5" />
+      <button type="button" aria-label="Eine Oktave höher" onClick={() => scrollBy(OCTAVE)} className="w-8 shrink-0 flex items-center justify-center text-dim">
+        <ChevronRight className="w-4 h-4" strokeWidth={1.25} />
       </button>
     </div>
   );

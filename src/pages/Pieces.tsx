@@ -1,13 +1,12 @@
 import { useRef, useState } from 'react';
-import { Download, Plus, Trash2, Upload } from 'lucide-react';
-import { BUTTON, BUTTON_GHOST, Empty, HEADING } from '../components/ui';
+import { X } from 'lucide-react';
+import { BUTTON, ICON_BUTTON, KICKER, TEXT_BUTTON } from '../components/ui';
 import type { Piece } from '../types';
 import { barCount } from '../utils/score';
 import { exportPieces, importPieces } from '../utils/storage';
-import { cn } from '../utils/cn';
 
-export function Pieces({ pieces, openId, onOpen, onCreate, onDelete, onImport }: {
-  pieces: Piece[]; openId: string | null; onOpen: (id: string) => void; onCreate: () => void;
+export function Pieces({ pieces, openId, onOpen, onVideo, onCreate, onDelete, onImport }: {
+  pieces: Piece[]; openId: string | null; onOpen: (id: string) => void; onVideo: () => void; onCreate: () => void;
   onDelete: (id: string) => void; onImport: (pieces: Piece[]) => void;
 }) {
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -37,40 +36,48 @@ export function Pieces({ pieces, openId, onOpen, onCreate, onDelete, onImport }:
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl p-4 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className={cn(HEADING, 'text-2xl')}>Stücke</h1>
-          <button type="button" onClick={onCreate} className={BUTTON}><Plus className="w-4 h-4" /> Neues Stück</button>
+      <div className="appear mx-auto w-full max-w-3xl px-6 py-12 sm:py-20">
+        <p className={KICKER}>Klavier</p>
+        <h1 className="mt-3 max-w-xl font-serif text-5xl sm:text-7xl leading-[1.02]">
+          Aus dem Video wird <em className="text-accent">ein Notenblatt.</em>
+        </h1>
+        <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <button type="button" onClick={onVideo} className={BUTTON}>Video auswählen</button>
+          <button type="button" onClick={onCreate} className={TEXT_BUTTON}>Leeres Notenblatt</button>
         </div>
 
-        {sorted.length === 0 && <Empty>Noch keine Stücke. Leg eins an und tippe das erste Video ab.</Empty>}
+        {sorted.length > 0 && (
+          <section className="mt-16" aria-label="Deine Stücke">
+            <p className={KICKER}>Deine Stücke</p>
+            <ol className="mt-3 border-t border-line">
+              {sorted.map((piece, index) => (
+                <li key={piece.id} className="flex items-center gap-4 border-b border-line">
+                  <button type="button" onClick={() => onOpen(piece.id)} className="flex flex-1 min-w-0 items-baseline gap-4 py-4 text-left">
+                    <span className="font-serif text-accent tabular-nums">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="min-w-0 flex-1 break-words font-serif text-2xl leading-tight">{piece.title || 'Ohne Titel'}</span>
+                    <span className="shrink-0 text-xs text-dim tabular-nums">{barCount(piece)} Takte{piece.id === openId ? ' · offen' : ''}</span>
+                  </button>
+                  {confirming === piece.id ? (
+                    <button type="button" onClick={() => { onDelete(piece.id); setConfirming(null); }} className="shrink-0 py-3 text-xs text-danger">
+                      Wirklich löschen
+                    </button>
+                  ) : (
+                    <button type="button" aria-label={`${piece.title} löschen`} onClick={() => setConfirming(piece.id)} className={ICON_BUTTON}>
+                      <X className="w-4 h-4" strokeWidth={1.25} />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
-        <ul className="space-y-2">
-          {sorted.map(piece => (
-            <li key={piece.id} className={cn('flex items-stretch rounded-md border bg-card', piece.id === openId ? 'border-accent' : 'border-line')}>
-              <button type="button" onClick={() => onOpen(piece.id)} className="flex-1 min-w-0 px-3 py-3 text-left">
-                <div className="break-words">{piece.title || 'Ohne Titel'}</div>
-                <div className="text-xs text-dim">{barCount(piece)} Takte · {new Date(piece.updatedAt).toLocaleDateString('de-DE')}</div>
-              </button>
-              {confirming === piece.id ? (
-                <button type="button" onClick={() => { onDelete(piece.id); setConfirming(null); }} className="px-3 text-sm text-danger">
-                  Wirklich löschen
-                </button>
-              ) : (
-                <button type="button" aria-label={`${piece.title} löschen`} onClick={() => setConfirming(piece.id)} className="w-12 flex items-center justify-center text-dim">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <button type="button" onClick={backup} disabled={!pieces.length} className={BUTTON_GHOST}><Download className="w-4 h-4" /> Backup</button>
-          <button type="button" onClick={() => file.current?.click()} className={BUTTON_GHOST}><Upload className="w-4 h-4" /> Backup laden</button>
+        <div className="mt-10 flex flex-wrap gap-x-4">
+          <button type="button" onClick={backup} disabled={!pieces.length} className={TEXT_BUTTON}>Backup sichern</button>
+          <button type="button" onClick={() => file.current?.click()} className={TEXT_BUTTON}>Backup laden</button>
           <input ref={file} type="file" accept="application/json,.json" className="hidden" onChange={e => { void restore(e.target.files?.[0]); e.target.value = ''; }} />
         </div>
-        {message && <p className="text-sm text-dim">{message}</p>}
+        {message && <p className="mt-2 text-sm text-dim">{message}</p>}
       </div>
     </div>
   );

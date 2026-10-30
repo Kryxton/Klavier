@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileMusic, ListMusic, Pencil, Play } from 'lucide-react';
 import { Empty } from './components/ui';
+import { Import } from './pages/Import';
 import { Pieces } from './pages/Pieces';
 import { Practice } from './pages/Practice';
 import { Write } from './pages/Write';
@@ -9,11 +9,11 @@ import { cn } from './utils/cn';
 import { newPiece } from './utils/edit';
 import { loadLibrary, mergePieces, saveLibrary, type Library } from './utils/storage';
 
-type Page = 'pieces' | 'write' | 'practice';
-const NAV: { id: Page; label: string; icon: typeof ListMusic }[] = [
-  { id: 'pieces', label: 'Stücke', icon: ListMusic },
-  { id: 'write', label: 'Schreiben', icon: Pencil },
-  { id: 'practice', label: 'Üben', icon: Play },
+type Page = 'pieces' | 'import' | 'write' | 'practice';
+const NAV: { id: Page; label: string }[] = [
+  { id: 'pieces', label: 'Stücke' },
+  { id: 'write', label: 'Notenblatt' },
+  { id: 'practice', label: 'Üben' },
 ];
 const UNDO_STEPS = 100;
 
@@ -71,17 +71,21 @@ export default function App() {
     setPage('write');
   };
 
+  const createFrom = (title: string, fields: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>) => {
+    const fresh = { ...newPiece(title || 'Neues Stück'), ...fields };
+    setLibrary(old => ({ pieces: [...old.pieces, fresh], openId: fresh.id }));
+    setSteps({ past: [], future: [] });
+    setPage('write');
+  };
+
   const remove = (id: string) => {
     setLibrary(old => ({ pieces: old.pieces.filter(p => p.id !== id), openId: old.openId === id ? null : old.openId }));
     if (id === library.openId) setSteps({ past: [], future: [] });
   };
 
   const needsPiece = (
-    <div className="p-4 mx-auto max-w-2xl">
-      <Empty>
-        <FileMusic className="w-6 h-6 mx-auto mb-2" />
-        Wähle zuerst unter „Stücke“ ein Stück aus.
-      </Empty>
+    <div className="mx-auto max-w-2xl">
+      <Empty>Wähle zuerst unter „Stücke“ ein Stück aus.</Empty>
     </div>
   );
 
@@ -95,22 +99,23 @@ export default function App() {
       <main className="flex-1 min-h-0">
         {page === 'pieces' && (
           <Pieces
-            pieces={library.pieces} openId={library.openId} onOpen={open} onCreate={create} onDelete={remove}
+            pieces={library.pieces} openId={library.openId} onOpen={open} onVideo={() => setPage('import')} onCreate={create} onDelete={remove}
             onImport={incoming => setLibrary(old => ({ ...old, pieces: mergePieces(old.pieces, incoming) }))}
           />
         )}
+        {page === 'import' && <Import onCreate={createFrom} onCancel={() => setPage('pieces')} />}
         {page === 'write' && (piece
           ? <Write key={piece.id} piece={piece} change={change} undo={undo} redo={redo} canUndo={steps.past.length > 0} canRedo={steps.future.length > 0} />
           : needsPiece)}
         {page === 'practice' && (piece ? <Practice key={piece.id} piece={piece} /> : needsPiece)}
       </main>
-      <nav className="shrink-0 grid grid-cols-3 border-t border-line bg-card pb-[env(safe-area-inset-bottom)]">
-        {NAV.map(({ id, label, icon: Icon }) => (
+      <nav className="shrink-0 flex justify-center gap-8 sm:gap-14 border-t border-line pb-[env(safe-area-inset-bottom)]">
+        {NAV.map(({ id, label }) => (
           <button
             key={id} type="button" onClick={() => setPage(id)} aria-current={page === id ? 'page' : undefined}
-            className={cn('flex flex-col items-center gap-0.5 py-1.5 text-[11px]', page === id ? 'text-accent' : 'text-dim')}
+            className={cn('-mt-px border-t py-3 text-[10px] font-medium uppercase tracking-[0.24em]', page === id ? 'border-accent text-text' : 'border-transparent text-dim')}
           >
-            <Icon className="w-5 h-5" /> {label}
+            {label}
           </button>
         ))}
       </nav>

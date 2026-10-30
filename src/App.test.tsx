@@ -18,13 +18,13 @@ const notes = () => loadLibrary().pieces[0].hands;
 
 function startPiece() {
   render(<App />);
-  tap(/Neues Stück/);
+  tap('Leeres Notenblatt');
 }
 
 describe('App', () => {
   it('starts on the list when nothing is open', () => {
     render(<App />);
-    expect(screen.getByRole('heading', { name: 'Stücke' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Video auswählen' })).toBeTruthy();
   });
 
   it('writes a chord with the chosen length', () => {
@@ -69,7 +69,7 @@ describe('App', () => {
     tap('Eintragen');
     cleanup();
     render(<App />);
-    expect(screen.getByRole('button', { name: 'Rückgängig' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Korrigieren' })).toBeTruthy();
     expect(notes().right).toHaveLength(1);
   });
 

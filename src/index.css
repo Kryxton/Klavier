@@ -2,17 +2,16 @@
 
 /* All colors of the app, so the look is one block of variables */
 @theme {
-  --color-ink: #0a080f;
-  --color-card: #12101a;
-  --color-paper: #f8f4e8;
-  --color-line: rgba(201, 168, 76, 0.2);
-  --color-text: #f2ebe0;
-  --color-dim: #a8a090;
-  --color-accent: #c9a84c;
-  --color-accent-light: #e8cc7a;
-  --color-on-accent: #0f0b18;
-  --color-danger: #c07060;
-  --font-serif: Georgia, "Times New Roman", serif;
+  --color-ink: #0c0b0a; /* piano lacquer */
+  --color-card: #131210;
+  --color-paper: #f5f0e6; /* ivory */
+  --color-line: rgba(245, 240, 230, 0.13);
+  --color-text: #f0ebe1;
+  --color-dim: #948e83;
+  --color-accent: #bfa27a; /* champagne */
+  --color-danger: #c4796b;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
 }
 
 html {
@@ -24,6 +23,8 @@ html {
 }
 
 body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
   /* No grey flash when tapping buttons on iOS */
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
@@ -32,6 +33,22 @@ body {
 /* A tap shows at once (the tap highlight is off above) */
 button:active:not(:disabled) {
   opacity: 0.7;
+}
+
+/* A new page fades in instead of popping up */
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.appear {
+  animation: appear 280ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .appear {
+    animation: none;
+  }
 }
 
 /* iOS zooms into any input with a font size below 16px; unlayered so it beats utility classes */
@@ -65,11 +82,11 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 .sheet .note-selected,
 .sheet .note-selected * {
-  fill: #a8791c;
-  stroke: #a8791c;
+  fill: #94703c;
+  stroke: #94703c;
 }
 .sheet .note-playing,
 .sheet .note-playing * {
-  fill: #2f6aa3;
-  stroke: #2f6aa3;
+  fill: #94703c;
+  stroke: #94703c;
 }
