@@ -1,17 +1,20 @@
 @import "tailwindcss";
 
-/* All colors of the app, so the look is one block of variables */
+/* All colors of the app, so the look is one block of variables. White surfaces, piano black and
+   one accent: the red felt inside a piano. */
 @theme {
-  --color-ink: #0c0b0a; /* piano lacquer */
-  --color-card: #131210;
-  --color-paper: #f5f0e6; /* ivory */
-  --color-line: rgba(245, 240, 230, 0.13);
-  --color-text: #f0ebe1;
-  --color-dim: #948e83;
-  --color-accent: #bfa27a; /* champagne */
-  --color-danger: #c4796b;
-  --font-serif: "Instrument Serif", Georgia, serif;
-  --font-sans: "Hanken Grotesk Variable", system-ui, sans-serif;
+  --color-ink: #f4f3f0;
+  --color-card: #ffffff;
+  --color-track: #e9e7e2;
+  --color-paper: #ffffff;
+  --color-line: #e4e2dc;
+  --color-text: #17181b;
+  --color-dim: #6e7076;
+  --color-accent: #c8202d;
+  --color-accent-soft: #fbe9ea;
+  --color-danger: #c8202d;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
@@ -24,29 +27,74 @@ html {
 
 body {
   font-family: var(--font-sans);
+  color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   /* No grey flash when tapping buttons on iOS */
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
 }
 
-/* A tap shows at once (the tap highlight is off above) */
+/* Everything tappable gives way a little under the finger */
+button {
+  transition: transform 140ms var(--ease-out-soft), background-color 180ms ease, color 180ms ease, opacity 180ms ease;
+}
 button:active:not(:disabled) {
-  opacity: 0.7;
+  transform: scale(0.97);
+}
+button[data-key]:active {
+  transform: none;
+  filter: brightness(0.93);
 }
 
-/* A new page fades in instead of popping up */
+/* Pages cross-fade (see utils/smooth.ts) */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease;
+}
+
 @keyframes appear {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
 }
 .appear {
-  animation: appear 280ms ease-out;
+  animation: appear 320ms var(--ease-out-soft);
 }
+
+@keyframes slide-up {
+  from {
+    opacity: 0.4;
+    transform: translateY(32px);
+  }
+}
+.slide-up {
+  animation: slide-up 280ms var(--ease-out-soft);
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+.pop {
+  animation: pop 380ms var(--ease-out-soft);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .appear {
+  .appear,
+  .slide-up,
+  .pop {
+    animation: none;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
     animation: none;
   }
 }
@@ -80,13 +128,14 @@ input[type="number"]::-webkit-outer-spin-button {
   display: block;
   margin: 0 auto;
 }
-.sheet .note-selected,
-.sheet .note-selected * {
-  fill: #94703c;
-  stroke: #94703c;
+.sheet .vf-stavenote,
+.sheet .vf-stavenote * {
+  transition: fill 120ms ease, stroke 120ms ease;
 }
+.sheet .note-selected,
+.sheet .note-selected *,
 .sheet .note-playing,
 .sheet .note-playing * {
-  fill: #94703c;
-  stroke: #94703c;
+  fill: var(--color-accent);
+  stroke: var(--color-accent);
 }

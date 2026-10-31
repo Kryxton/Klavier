@@ -71,7 +71,7 @@ function roomNeeded(bars: Bar[]) {
 
 function draw(host: HTMLElement, piece: Piece, width: number): DrawnNote[] {
   host.innerHTML = '';
-  const scale = width < 600 ? 0.72 : 1;
+  const scale = width < 360 ? 0.58 : width < 600 ? 0.72 : 1;
   const available = (width - 4) / scale;
 
   const ticks = barTicks(piece);

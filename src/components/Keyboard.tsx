@@ -51,12 +51,13 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
         data-key={midi}
         className={cn(
           'absolute top-0 flex items-end justify-center select-none',
-          black ? 'z-10 h-[62%] bg-ink' : 'h-full border-r border-ink/25 bg-paper',
+          black ? 'z-10 h-[62%] rounded-b-[3px] bg-text' : 'h-full rounded-b-[3px] border-r border-line bg-card',
+          'transition-colors duration-150',
           (on || sounding) && 'bg-accent',
         )}
         style={{ left: `${box.left * 100}%`, width: `${box.width * 100}%` }}
       >
-        {showName && <span className="pb-1.5 text-[9px] leading-none tracking-wider text-ink/50 pointer-events-none">{name}</span>}
+        {showName && <span className={cn('pb-1.5 text-[10px] leading-none pointer-events-none', on ? 'text-white' : 'text-dim')}>{name}</span>}
       </button>
     );
   };
@@ -67,16 +68,16 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
     </div>
   );
 
-  if (fit) return <div className={cn('shrink-0 bg-ink', className)}>{board}</div>;
+  if (fit) return <div className={cn('shrink-0 bg-card', className)}>{board}</div>;
 
   return (
-    <div className={cn('relative shrink-0 flex bg-ink', className)}>
+    <div className={cn('relative shrink-0 flex bg-track', className)}>
       <button type="button" aria-label="Eine Oktave tiefer" onClick={() => scrollBy(-OCTAVE)} className="w-8 shrink-0 flex items-center justify-center text-dim">
-        <ChevronLeft className="w-4 h-4" strokeWidth={1.25} />
+        <ChevronLeft className="w-5 h-5" />
       </button>
       <div ref={scroller} data-testid="keys" className="no-scrollbar flex-1 min-w-0 overflow-x-auto overflow-y-hidden">{board}</div>
       <button type="button" aria-label="Eine Oktave höher" onClick={() => scrollBy(OCTAVE)} className="w-8 shrink-0 flex items-center justify-center text-dim">
-        <ChevronRight className="w-4 h-4" strokeWidth={1.25} />
+        <ChevronRight className="w-5 h-5" />
       </button>
     </div>
   );

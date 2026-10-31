@@ -11,6 +11,7 @@ export interface Frame {
 export interface KeyMap {
   keyTop: number; // first pixel row of the keys
   scanY: number; // the row just above them, where the falling bars are read
+  keyRow: number; // a row through the black keys
   unit: number; // width of a white key in pixels
   keys: { midi: number; x: number }[];
   fullKeyboard: boolean; // 88 keys: the octave is certain, otherwise it is a good guess
@@ -136,13 +137,18 @@ export function findKeyboard(frame: Frame): KeyMap | null {
   }
   if (!best) return null;
 
-  // Up to where the black keys start
+  // Straight up to where the black keys start. Their tops are free: hands only hide the lower
+  // part of the keys, where the search above often ends up.
+  const reach = (best.centres[best.centres.length - 1] - best.centres[0]) / best.centres.length / 2;
+  const blackHere = (y: number) => {
+    const dark = best.centres.filter(x => {
+      const beside = Math.max(luma(frame, Math.round(Math.max(0, x - reach)), y), luma(frame, Math.round(Math.min(frame.width - 1, x + reach)), y));
+      return luma(frame, Math.round(x), y) < beside * 0.7;
+    });
+    return dark.length >= best.centres.length * 0.6;
+  };
   let keyTop = bestRow;
-  for (let y = bestRow - 1; y >= 0; y--) {
-    const pattern = readPattern(darkCentres(frame, y));
-    if (!pattern || pattern.centres.length < best.centres.length * 0.7) break;
-    keyTop = y;
-  }
+  while (keyTop > 0 && blackHere(keyTop - 1)) keyTop--;
 
   // The octave: certain with all 36 black keys, otherwise the keyboard is taken to sit around the
   // middle of the piano
@@ -161,5 +167,10 @@ export function findKeyboard(frame: Frame): KeyMap | null {
     const x = offset + slope * (keyPosition(midi) + (isBlack(midi) ? 0 : 0.5));
     if (x >= 0 && x < frame.width) keys.push({ midi, x });
   }
-  return { keyTop, scanY: Math.max(0, keyTop - Math.max(2, Math.round(slope * 0.35))), unit: slope, keys, fullKeyboard: full };
+  // Three key widths above the keys: bars look the same everywhere, but landing notes flash and
+  // glow right over the keys. Only when the note starts is shifted, by the same amount for all.
+  return {
+    keyTop, scanY: Math.max(0, keyTop - Math.max(2, Math.round(slope * 3))), keyRow: Math.min(frame.height - 1, keyTop + Math.round(slope)),
+    unit: slope, keys, fullKeyboard: full,
+  };
 }

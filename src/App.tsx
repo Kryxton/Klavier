@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { FileMusic, ListMusic, Play } from 'lucide-react';
 import { Empty } from './components/ui';
 import { Import } from './pages/Import';
 import { Pieces } from './pages/Pieces';
@@ -7,19 +8,22 @@ import { Write } from './pages/Write';
 import type { Piece } from './types';
 import { cn } from './utils/cn';
 import { newPiece } from './utils/edit';
+import { smoothly } from './utils/smooth';
 import { loadLibrary, mergePieces, saveLibrary, type Library } from './utils/storage';
 
 type Page = 'pieces' | 'import' | 'write' | 'practice';
-const NAV: { id: Page; label: string }[] = [
-  { id: 'pieces', label: 'Stücke' },
-  { id: 'write', label: 'Notenblatt' },
-  { id: 'practice', label: 'Üben' },
+const NAV: { id: Page; label: string; icon: typeof ListMusic }[] = [
+  { id: 'pieces', label: 'Stücke', icon: ListMusic },
+  { id: 'write', label: 'Notenblatt', icon: FileMusic },
+  { id: 'practice', label: 'Üben', icon: Play },
 ];
 const UNDO_STEPS = 100;
 
 export default function App() {
   const [library, setLibrary] = useState<Library>(loadLibrary);
-  const [page, setPage] = useState<Page>(() => (loadLibrary().openId ? 'write' : 'pieces'));
+  const [page, showPage] = useState<Page>(() => (loadLibrary().openId ? 'write' : 'pieces'));
+  const [dropped, setDropped] = useState<File | null>(null);
+  const setPage = (next: Page) => smoothly(() => showPage(next));
   const [saved, setSaved] = useState(true);
   const [steps, setSteps] = useState<{ past: Piece[]; future: Piece[] }>({ past: [], future: [] });
   const libraryNow = useRef(library);
@@ -89,36 +93,56 @@ export default function App() {
     </div>
   );
 
+  const activeTab = Math.max(0, NAV.findIndex(item => item.id === page));
+
   return (
-    <div className="h-dvh flex flex-col bg-ink text-text">
-      {!saved && (
-        <p role="alert" className="shrink-0 px-3 py-2 text-sm bg-danger text-text">
-          Speichern im Browser hat nicht geklappt. Lade unter „Stücke“ ein Backup herunter.
-        </p>
-      )}
-      <main className="flex-1 min-h-0">
-        {page === 'pieces' && (
-          <Pieces
-            pieces={library.pieces} openId={library.openId} onOpen={open} onVideo={() => setPage('import')} onCreate={create} onDelete={remove}
-            onImport={incoming => setLibrary(old => ({ ...old, pieces: mergePieces(old.pieces, incoming) }))}
+    <div className="h-dvh flex flex-col-reverse lg:flex-row bg-ink text-text">
+      <nav className="shrink-0 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] lg:w-56 lg:border-t-0 lg:border-r lg:p-3 lg:pb-3">
+        <p className="hidden px-3 pt-2 pb-4 text-[20px] font-bold tracking-tight lg:block">Klavier</p>
+        <div className="relative grid grid-cols-3 lg:grid-cols-1">
+          <div
+            aria-hidden
+            style={{ '--tab': activeTab, transition: 'transform 300ms var(--ease-out-soft)' } as CSSProperties}
+            className="absolute left-0 top-0 h-0.5 w-1/3 rounded-full bg-accent [transform:translateX(calc(var(--tab)*100%))] lg:h-11 lg:w-full lg:rounded-xl lg:bg-accent-soft lg:[transform:translateY(calc(var(--tab)*100%))]"
           />
-        )}
-        {page === 'import' && <Import onCreate={createFrom} onCancel={() => setPage('pieces')} />}
-        {page === 'write' && (piece
-          ? <Write key={piece.id} piece={piece} change={change} undo={undo} redo={redo} canUndo={steps.past.length > 0} canRedo={steps.future.length > 0} />
-          : needsPiece)}
-        {page === 'practice' && (piece ? <Practice key={piece.id} piece={piece} /> : needsPiece)}
-      </main>
-      <nav className="shrink-0 flex justify-center gap-8 sm:gap-14 border-t border-line pb-[env(safe-area-inset-bottom)]">
-        {NAV.map(({ id, label }) => (
-          <button
-            key={id} type="button" onClick={() => setPage(id)} aria-current={page === id ? 'page' : undefined}
-            className={cn('-mt-px border-t py-3 text-[10px] font-medium uppercase tracking-[0.24em]', page === id ? 'border-accent text-text' : 'border-transparent text-dim')}
-          >
-            {label}
-          </button>
-        ))}
+          {NAV.map(({ id, label, icon: Icon }) => {
+            const on = activeTab === NAV.findIndex(item => item.id === id);
+            return (
+              <button
+                key={id} type="button" onClick={() => setPage(id)} aria-current={on ? 'page' : undefined}
+                className={cn(
+                  'relative flex h-[54px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium lg:h-11 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-[15px]',
+                  on ? 'text-accent' : 'text-dim',
+                )}
+              >
+                <Icon className="h-[22px] w-[22px] lg:h-5 lg:w-5" strokeWidth={on ? 2.25 : 1.75} /> {label}
+              </button>
+            );
+          })}
+        </div>
       </nav>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {!saved && (
+          <p role="alert" className="shrink-0 bg-accent px-3 py-2 text-sm text-white">
+            Speichern im Browser hat nicht geklappt. Lade unter „Stücke“ ein Backup herunter.
+          </p>
+        )}
+        <main className="min-h-0 flex-1">
+          {page === 'pieces' && (
+            <Pieces
+              pieces={library.pieces} openId={library.openId} onOpen={open} onCreate={create} onDelete={remove}
+              onVideo={() => { setDropped(null); setPage('import'); }}
+              onDropVideo={file => { setDropped(file); setPage('import'); }}
+              onImport={incoming => setLibrary(old => ({ ...old, pieces: mergePieces(old.pieces, incoming) }))}
+            />
+          )}
+          {page === 'import' && <Import first={dropped} onCreate={createFrom} onCancel={() => setPage('pieces')} />}
+          {page === 'write' && (piece
+            ? <Write key={piece.id} piece={piece} change={change} undo={undo} redo={redo} canUndo={steps.past.length > 0} canRedo={steps.future.length > 0} />
+            : needsPiece)}
+          {page === 'practice' && (piece ? <Practice key={piece.id} piece={piece} /> : needsPiece)}
+        </main>
+      </div>
     </div>
   );
 }

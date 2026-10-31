@@ -49,7 +49,7 @@ const shot = async name => {
 };
 const size = (width, height, mobile = true) => send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile });
 const clickText = async text => {
-  const box = await run(`(() => { const e = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)}); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  const box = await run(`(() => { const e = [...document.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(text)})); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
   if (!box) throw new Error('kein Knopf: ' + text);
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: box.x, y: box.y, button: 'left', clickCount: 1 });
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box.x, y: box.y, button: 'left', clickCount: 1 });
@@ -68,7 +68,7 @@ const NAME = process.argv[4] ?? 'tutorial';
 const videoPath = join(process.argv[5], `${NAME}.mp4`);
 const { right, left } = JSON.parse(readFileSync(join(process.argv[5], `${NAME}.json`), 'utf8'));
 
-await clickText('Video auswählen');
+await clickText('Video in Noten');
 await sleep(400);
 await shot('import-390');
 const doc = await send('DOM.getDocument');
@@ -87,7 +87,6 @@ console.log('state', state);
 await shot('result-390');
 if (state !== 'FERTIG') { console.log(JSON.stringify(problems)); finish(1); }
 
-await run(`document.querySelector('input[aria-label=Titel]').blur()`);
 await clickText('Notenblatt erstellen');
 await sleep(1200);
 await shot('sheet-390');

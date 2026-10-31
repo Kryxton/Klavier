@@ -6,61 +6,118 @@ import type { Detected } from './tracker';
 const GRID = PPQ / 4; // everything lands on sixteenths
 const MIN_BPM = 45;
 const MAX_BPM = 200;
-const FIT = 0.16; // mean distance from the grid, in grid steps; a random note lands at 0.29
+const FIT = 0.16; // mean distance from the grid, in grid steps; a random note lands at 0.25
+const EXACT = 0.02; // seconds: machine-made tutorials hit the beat this closely, people don't
+const FOLLOW = 0.08; // how fast the counted tempo follows the music
+const DRIFT = 0.15; // how far it may wander
+const CHORD = 0.06; // seconds; notes this close were meant together
+const NUDGE = 0.2; // how far one played note moves the grid
+const PULSE_MIN = 0.3; // seconds between beats
+const PULSE_MAX = 2;
 
-// How well onsets fit a grid of sixteenths, as a share of one step
-function gridError(onsets: number[], bpm: number) {
-  const step = 60 / bpm / 4;
-  let sum = 0;
-  for (const t of onsets) {
-    const position = (t - onsets[0]) / step;
-    sum += Math.abs(position - Math.round(position));
+// Follows the music through its note starts the way a musician counts along: each note says where
+// the beat really is, and the tempo drifts with it. A fixed grid can't work on played music, where
+// a beat takes 0.93 seconds here and 1.0 there.
+function follow(onsets: number[], bpm: number) {
+  const base = 60 / bpm / 4;
+  let step = base;
+  let at = onsets[0];
+  let index = 0;
+  let error = 0;
+  let off = 0;
+  let missed = 0;
+  const steps = [0];
+  for (const time of onsets.slice(1)) {
+    const gap = time - at;
+    const count = Math.max(1, Math.round(gap / step));
+    const miss = gap - count * step;
+    const share = Math.abs(miss) / step;
+    error += share;
+    off += Math.abs(miss);
+    if (share > 0.3) missed++;
+    index += count;
+    steps.push(index);
+    step = Math.min(base * (1 + DRIFT), Math.max(base * (1 - DRIFT), step + (FOLLOW * miss) / count));
+    at = time;
   }
-  return sum / onsets.length;
+  const notes = Math.max(1, onsets.length - 1);
+  // The tempo actually counted, which may have drifted away from the one started with
+  const tempo = index ? (60 * index) / (4 * (onsets[onsets.length - 1] - onsets[0])) : bpm;
+  return { steps, tempo, error: error / notes, off: off / notes, missed: missed / notes };
 }
 
-// The beat: the tempo around 100 that still puts every note on the grid. Slower ones would make
-// the sixteenths too coarse, doubled ones just look busy.
-export function findTempo(onsets: number[]) {
-  if (onsets.length < 2) return { bpm: 100, sure: false };
-  const candidates: { bpm: number; error: number }[] = [];
-  for (let bpm = MIN_BPM; bpm <= MAX_BPM; bpm += 0.1) candidates.push({ bpm, error: gridError(onsets, bpm) });
-
-  const good = candidates.filter(c => c.error < FIT);
-  if (!good.length) {
-    const fallback = candidates.filter(c => c.bpm >= 60 && c.bpm <= 130).reduce((a, b) => (b.error < a.error ? b : a));
-    return { bpm: fallback.bpm, sure: false };
+// For played music, where chords are rolled and notes come early or late: the grid keeps its own
+// course, each note only nudges it. Notes of a rolled chord land on the same step.
+function countAlong(onsets: number[], bpm: number) {
+  const base = 60 / bpm / 4;
+  let step = base;
+  let grid = onsets[0];
+  let index = 0;
+  const steps = [0];
+  for (const time of onsets.slice(1)) {
+    const count = Math.max(0, Math.round((time - grid) / step));
+    const miss = time - grid - count * step;
+    index += count;
+    steps.push(index);
+    grid += count * step + NUDGE * miss;
+    step = Math.min(base * (1 + DRIFT), Math.max(base * (1 - DRIFT), step + (0.02 * miss) / Math.max(1, count)));
   }
-  const fits = candidates.filter((c, i) =>
-    c.error < FIT && c.error <= (candidates[i - 1]?.error ?? 1) && c.error <= (candidates[i + 1]?.error ?? 1));
-  const score = (c: { bpm: number }) =>
-    plainness(onsets, c.bpm) - 0.15 * Math.abs(Math.log2(c.bpm / 100)) - 3 * offGrid(onsets, c.bpm);
-  return { bpm: fits.reduce((a, b) => (score(b) > score(a) ? b : a)).bpm, sure: true };
+  return steps;
 }
 
-// The share of notes that clearly miss the grid. One fast run in a slow piece hardly moves the mean
-// error, but halving the tempo would still squeeze those notes together.
-function offGrid(onsets: number[], bpm: number) {
-  const step = 60 / bpm / 4;
-  const missed = onsets.filter(t => {
-    const position = (t - onsets[0]) / step;
-    return Math.abs(position - Math.round(position)) > 0.3;
+// The pulse of played music: the distance at which note starts keep coming back. Chords weigh more
+// than single notes, they mostly fall on the beat.
+function findPulse(onsets: number[], weights: number[]) {
+  const bin = 0.01;
+  const length = Math.ceil((onsets[onsets.length - 1] - onsets[0]) / bin) + 1;
+  const signal = new Float64Array(length);
+  onsets.forEach((time, i) => {
+    const at = Math.round((time - onsets[0]) / bin);
+    for (let d = -4; d <= 4; d++) {
+      if (at + d >= 0 && at + d < length) signal[at + d] += weights[i] * Math.exp(-(d * d) / 8);
+    }
   });
-  return missed.length / onsets.length;
+  let best = 1;
+  let bestScore = -1;
+  for (let lag = Math.round(PULSE_MIN / bin); lag <= Math.round(PULSE_MAX / bin); lag++) {
+    let sum = 0;
+    for (let i = 0; i + lag < length; i++) sum += signal[i] * signal[i + lag];
+    if (sum > bestScore) {
+      bestScore = sum;
+      best = lag;
+    }
+  }
+  let bpm = 60 / (best * bin);
+  while (bpm > 130) bpm /= 2;
+  while (bpm < 50) bpm *= 2;
+  return bpm;
 }
 
 // Many tempos fit mathematically; the right one writes the notes as plain values. Even spacing at
 // 90 instead of 120 would be all dotted eighths.
-function plainness(onsets: number[], bpm: number) {
-  const step = 60 / bpm / 4;
-  const value = (steps: number) => {
-    if (steps === 2 || steps === 4) return 1;
-    if (steps === 1 || steps === 8) return 0.9;
-    if (steps === 3 || steps === 6 || steps === 12 || steps === 16) return 0.5;
+function plainness(steps: number[]) {
+  const value = (count: number) => {
+    if (count === 2 || count === 4) return 1;
+    if (count === 1 || count === 8) return 0.9;
+    if (count === 3 || count === 6 || count === 12 || count === 16) return 0.5;
     return 0.3;
   };
-  const gaps = onsets.slice(1).map((t, i) => Math.round((t - onsets[i]) / step));
-  return gaps.reduce((sum, steps) => sum + value(steps), 0) / gaps.length;
+  return steps.slice(1).reduce((sum, s, i) => sum + value(s - steps[i]), 0) / Math.max(1, steps.length - 1);
+}
+
+// The tempo near 100 that keeps the notes on the grid, in plain note values. Halving it would look
+// tidy but squeeze fast notes together, so notes that miss the grid weigh heavily.
+export function findTempo(onsets: number[]) {
+  if (onsets.length < 2) return { bpm: 100, start: 100, sure: false };
+  const tried: { bpm: number; tempo: number; error: number; off: number; score: number }[] = [];
+  for (let bpm = MIN_BPM; bpm <= MAX_BPM; bpm += 0.5) {
+    const { steps, tempo, error, off, missed } = follow(onsets, bpm);
+    tried.push({ bpm, tempo, error, off, score: plainness(steps) - 0.15 * Math.abs(Math.log2(tempo / 100)) - 3 * missed });
+  }
+  const good = tried.filter(t => t.error < FIT && t.off < EXACT);
+  const pool = good.length ? good : tried.filter(t => t.bpm >= 60 && t.bpm <= 130);
+  const best = pool.reduce((a, b) => (b.score > a.score ? b : a));
+  return { bpm: best.tempo, start: best.bpm, sure: good.length > 0 };
 }
 
 // The key signature with the fewest notes outside of it
@@ -110,7 +167,7 @@ const emit = (events: Ev[], keys: number[], ticks: number) => {
 };
 
 // One hand has one voice here: a note held under a faster melody ends where the next note starts
-function handEvents(notes: { tick: number; length: number; midi: number }[]) {
+function handEvents(notes: { tick: number; length: number; midi: number }[], hold: number) {
   const starts = [...new Set(notes.map(n => n.tick))].sort((a, b) => a - b);
   const events: Ev[] = [];
   let now = 0;
@@ -120,7 +177,7 @@ function handEvents(notes: { tick: number; length: number; midi: number }[]) {
     const next = starts[i + 1] ?? Infinity;
     const held = Math.max(...chord.map(n => n.length));
     // Bars stop just short of the next one: a gap that small is no rest
-    const length = next - tick - held <= GRID ? next - tick : held;
+    const length = next - tick - held <= hold ? next - tick : held;
     emit(events, [...new Set(chord.map(n => n.midi))].sort((a, b) => a - b), length);
     now = tick + length;
   });
@@ -136,21 +193,44 @@ export interface Reading {
 // From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
 // import page: an octave for short keyboards, and half or double when the beat was misjudged.
 export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {}): Reading {
-  const onsets = [...new Set(notes.map(n => Math.round(n.start * 1000) / 1000))].sort((a, b) => a - b);
-  const merged = onsets.filter((t, i) => i === 0 || t - onsets[i - 1] > 0.03);
-  const tempo = findTempo(merged);
+  const times = [...new Set(notes.map(n => n.start))].sort((a, b) => a - b);
+  // A chord: every note of it takes the time of its first
+  const together = (span: number) => times.filter((t, i) => i === 0 || t - times[i - 1] > span);
+  const exact = together(CHORD);
+  const steady = findTempo(exact);
+  const weights = exact.map((t, i) => notes.filter(n => n.start >= t && n.start < (exact[i + 1] ?? Infinity)).length);
+  const pulse = steady.sure || exact.length < 8 ? null : findPulse(exact, weights);
+  // Played chords are often rolled: what is closer than half a sixteenth belongs together
+  const onsets = pulse ? together((0.45 * 15) / pulse) : exact;
+  const tempo = pulse ? { ...steady, bpm: pulse } : steady;
   const bpm = tempo.bpm * tempoFactor;
-  const perSecond = (bpm * PPQ) / 60;
-  const first = merged[0] ?? 0;
-  const snap = (seconds: number) => Math.round((seconds * perSecond) / GRID) * GRID;
+  const anchors = !onsets.length ? [] : pulse ? countAlong(onsets, pulse) : follow(onsets, steady.start).steps;
+  const scale = tempoFactor; // half the tempo: every note takes half as many steps
 
-  const placed = notes.map(note => ({
-    midi: note.midi + octave * 12,
-    hand: note.hand,
-    tick: snap(note.start - first),
-    // A bar looks a little shorter than the note it stands for, so its end is rounded up
-    length: Math.max(GRID, snap(note.end - note.start + (0.3 * GRID) / perSecond)),
-  }));
+  // Seconds to ticks along the followed beat, between the note starts
+  const tickAt = (seconds: number) => {
+    let i = onsets.findIndex(t => t > seconds);
+    if (i < 0) i = onsets.length - 1;
+    i = Math.max(1, i);
+    if (onsets.length < 2) return ((seconds - (onsets[0] ?? 0)) * bpm * PPQ) / 60;
+    const from = onsets[i - 1];
+    const count = anchors[i] - anchors[i - 1];
+    if (!count) return anchors[i] * GRID * scale;
+    return (anchors[i - 1] + ((seconds - from) * count) / (onsets[i] - from)) * GRID * scale;
+  };
+  const snap = (ticks: number) => Math.round(ticks / GRID) * GRID;
+
+  const placed = notes.map(note => {
+    const nearest = onsets.reduce((a, t, i) => (Math.abs(t - note.start) < Math.abs(onsets[a] - note.start) ? i : a), 0);
+    const tick = snap(anchors[nearest] * GRID * scale);
+    return {
+      midi: note.midi + octave * 12,
+      hand: note.hand,
+      tick,
+      // A bar looks a little shorter than the note it stands for, so its end is rounded up
+      length: Math.max(GRID, snap(tickAt(note.end) + 0.3 * GRID) - tick),
+    };
+  });
 
   const beats = 4;
   const beatValue = 4;
@@ -166,6 +246,8 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
   const pickup = (ticksPerBar - phase) % ticksPerBar;
   const moved = placed.map(n => ({ ...n, tick: n.tick + pickup }));
   const key = findKey(notes);
+  // Played music is mostly held with the pedal: a chord lasts until the next one
+  const hold = pulse ? GRID * 3 : GRID;
 
   return {
     bpm,
@@ -173,8 +255,8 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
     piece: {
       beats, beatValue, key, bpm: Math.round(bpm),
       hands: {
-        right: handEvents(moved.filter(n => n.hand === 'right')),
-        left: handEvents(moved.filter(n => n.hand === 'left')),
+        right: handEvents(moved.filter(n => n.hand === 'right'), hold),
+        left: handEvents(moved.filter(n => n.hand === 'left'), hold),
       },
     },
   };

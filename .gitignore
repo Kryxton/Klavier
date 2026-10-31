@@ -18,3 +18,11 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .vercel/
+
+# Recorded tutorials: never in the public repo
+*.mp4
+*.MP4
+*.mov
+*.MOV
+*.webm
+*.m4v

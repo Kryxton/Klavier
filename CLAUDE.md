@@ -10,7 +10,9 @@ Started 2026-10-30.
 such YouTube tutorials and doesn't want to type them out (said clearly 2026-10-30; the first
 version missed this and only made typing faster). The user doesn't make videos. Falling notes to
 watch are an extra, never the focus. Only for the user, with cloud sync still to come.
-Design (user, 2026-10-30): luxury palette, modern and clean, no generic website.
+Design (user, 2026-10-31): clear and tidy above all, smooth and satisfying to use, must look like
+no AI made it (the black-gold version with spaced capitals and serif italics was rejected, tabs
+especially), and work on phone, iPad and laptop.
 
 ## Hosting
 - The rebuild was merged into `main` on 2026-10-30; the user said the old site and its pieces don't
@@ -42,21 +44,32 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
 - Pages: `Pieces` (home, list, backup file), `Import` (video to piece), `Write` = „Notenblatt“: the
   score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord, „+“
   puts a rest behind the note to fill), `Practice` (Noten, Fallend as the extra).
-- `src/video/`: video to notes, runs on the device, no server. `keyboard.ts` finds the keys in a
-  picture from the 2-3 pattern of the black keys (88 keys: octave certain; fewer: guessed, the
-  import page offers a correction). `tracker.ts` reads one pixel row just above the keys: a bar
-  passing it = a note. Background = most frequent colour per place, not the median (held keys).
-  A black key needs a bar on both sides of its middle, because white bars reach into it. Hands by
-  hue only (tutorials use two shades per hand), one colour = split at middle C. `rhythm.ts`: tempo
-  (fits a sixteenth grid, plain note values, near 100), bar 1, key signature, one voice per hand.
-  `readVideo.ts`: plays at speed 1 (faster loses exact timing, 140 BPM was then read as 70), then
-  reads every hole picture by picture; never waits on `ended` or `seeked` alone (both hung once).
+- `src/video/`: video to notes, runs on the device, no server.
+  - `keyboard.ts`: finds the keys from the 2-3 pattern of the black keys (88 keys: octave certain;
+    fewer: guessed, the import page corrects it). The top edge is found straight up from the black
+    keys, because hands hide their lower part. `scanY` = 3 key widths above: right over the keys
+    landing notes flash and glow.
+  - `tracker.ts`: follows whole bars through the row, the key comes from the bar's middle (exact
+    to a pixel or two; widths change with glow). Background = most frequent colour per pixel.
+    Dropped: faint things (dust, compared with long bars nearby), colourless things (the player's
+    pause symbol, text), pieces inside a long bar, pictures without a keyboard (transitions, ads).
+    Limits in seconds, not frames: browsers deliver other frame rates than a 30 fps test.
+    Hands by hue only (two shades per hand are common), one colour = split at middle C.
+  - `rhythm.ts`: `follow` for machine-made tutorials (notes within `EXACT`). Otherwise played music:
+    `findPulse` (autocorrelation), `countAlong` (a grid that notes only nudge), rolled chords are
+    grouped, short chords held to the next. One voice per hand, always 4/4.
+  - `readVideo.ts`: a fast run for the keyboard (8×, then 2× if that found nothing), then a fresh
+    video element at speed 1. **No seeking in the main path:** Chrome on Windows stops answering
+    after the first seek in iPhone recordings (HEVC). Holes are only an extra, with a time budget;
+    recordings have uneven frames, so small gaps are no holes.
 - `utils/storage.ts`: everything in localStorage `klavier_pieces`, saved on every change, opened
   again on start. Failure shows a banner.
 - `components/ui.tsx`: shared pieces, use them. Colors only through the tokens in `index.css`.
-  Look: lacquer black, ivory paper, champagne accent; Instrument Serif + Hanken Grotesk (bundled);
-  sharp corners, hairlines, no gradients, no filled chips. Inputs get their size from the parent
-  (the iOS rule `max(16px, 1em)` in index.css beats `text-*` on the input itself).
+  Look: white surfaces on warm grey, piano black, one accent: the red felt of a piano (Apple Music
+  feel). System font, sentence case, real note symbols for lengths (`NoteIcons.tsx`). `Choice` =
+  segmented control with a sliding thumb. Navigation is one element: bottom bar, from `lg` a sidebar
+  (upright iPads keep the width for the score). Pages cross-fade (`utils/smooth.ts`), tools slide
+  up. Inputs get their size from the parent (the iOS rule `max(16px, 1em)` beats `text-*` on them).
 
 ## Checking in the browser
 Sound and VexFlow are mocked in `App.test.tsx`, so tests don't prove them; check in real Chrome.
@@ -68,18 +81,24 @@ Long heredocs in the Bash tool break: write scripts to the scratchpad.
 
 ## Checking the video reading
 `scripts/makevideo.mjs` draws a tutorial with known notes as a real H.264 MP4 (`npm i --no-save
-ffmpeg-static`), `scripts/video-check.mjs` uploads it through the page in headless Chrome and
-compares the score note by note. Don't record test videos with MediaRecorder: in headless Chrome
-the file had a 13 s hole, which looked exactly like a bug in the reading.
+ffmpeg-static`), `scripts/video-check.mjs` uploads it through the page and compares note by note.
+`scripts/recording-check.mjs` runs a real recording through the page with screenshots at all sizes.
+`scripts/row-strip.mjs` stacks one pixel row of every frame into a picture: the best way to see
+what the reading sees. Real recordings found everything generated ones didn't, always try one.
+Don't record test videos with MediaRecorder: the file had a 13 s hole that looked like a bug.
+The user's recording (Cinnamon Girl, portrait, HEVC, one bar colour, hands, smoke) lies in the
+project folder; video files are gitignored and must stay out of this public repo.
 
 ## Open
-- **Never tried with a real YouTube tutorial or on iPhone/iPad/Safari.** All tests so far use
-  generated videos in Chrome. First thing to do when the user sends a recording.
+- **Accuracy on real videos is unproven:** no original to compare with. For the Cinnamon Girl
+  recording the browser finds about 690 notes, the same code on ffmpeg frames about 850; the
+  reason is unknown (the first bars agree). Needs the user's ear, then more recordings.
+- Not tried in Safari on iPhone/iPad at all. Reading takes about the length of the video.
 - Vercel, see Hosting. Then cloud sync (same Supabase project, own table, SQL file the user runs).
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
   A YouTube link was discussed and declined: reading the running tab works only on the PC, a
   download server is against YouTube's terms and fragile.
 - The reading always writes 4/4, sixteenths at the finest, one voice per hand. Missing: 3/4 and 6/8,
-  triplets, rubato (shows „keinen gleichmäßigen Takt“), held notes under a melody.
+  triplets, held notes under a melody. Tidier note values for played music.
 - Not yet: slurs, dynamics, pedal, repeat signs, PNG/PDF export (the old site had PNG), keyboard
   shortcuts on the PC, installing as an app (manifest, icons, service worker).

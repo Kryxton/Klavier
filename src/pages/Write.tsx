@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Copy, CopyPlus, Plus, Redo2, Settings2, Trash2, Undo2 } from 'lucide-react';
 import { Keyboard } from '../components/Keyboard';
 import { Sheet } from '../components/Sheet';
-import { BUTTON, Chip, Choice, ICON_BUTTON, INPUT, KICKER, TEXT_BUTTON } from '../components/ui';
+import { DotIcon, NoteIcon, TieIcon } from '../components/NoteIcons';
+import { BUTTON, Choice, ICON_BUTTON, INPUT, LABEL, SHEET, TEXT_BUTTON, Toggle } from '../components/ui';
 import type { Duration, Hand, Piece } from '../types';
 import { playKey } from '../utils/audio';
 import { cn } from '../utils/cn';
@@ -11,13 +12,13 @@ import {
 } from '../utils/edit';
 import { KEY_CHOICES, isBlack, label } from '../utils/notes';
 
-const DURATIONS: { id: Duration; label: string; name: string }[] = [
-  { id: 'w', label: '1/1', name: 'Ganze' },
-  { id: 'h', label: '1/2', name: 'Halbe' },
-  { id: 'q', label: '1/4', name: 'Viertel' },
-  { id: '8', label: '1/8', name: 'Achtel' },
-  { id: '16', label: '1/16', name: 'Sechzehntel' },
-  { id: '32', label: '1/32', name: 'Zweiunddreißigstel' },
+const DURATIONS: { id: Duration; name: string }[] = [
+  { id: 'w', name: 'Ganze' },
+  { id: 'h', name: 'Halbe' },
+  { id: 'q', name: 'Viertel' },
+  { id: '8', name: 'Achtel' },
+  { id: '16', name: 'Sechzehntel' },
+  { id: '32', name: 'Zweiunddreißigstel' },
 ];
 const HANDS: { id: Hand; label: string }[] = [
   { id: 'right', label: 'Rechte Hand' },
@@ -26,7 +27,7 @@ const HANDS: { id: Hand; label: string }[] = [
 const BEATS = [2, 3, 4, 5, 6, 7, 9, 12];
 const BEAT_VALUES = [2, 4, 8];
 
-const ICON = { strokeWidth: 1.25, className: 'w-5 h-5' };
+const ICON = { strokeWidth: 1.75, className: 'w-5 h-5' };
 
 export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   piece: Piece; change: (next: (piece: Piece) => Piece) => void; undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean;
@@ -134,12 +135,12 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="shrink-0 flex items-center gap-1 px-4 py-2 border-b border-line text-2xl">
+      <header className="shrink-0 flex items-center gap-1 px-4 py-2 md:px-6 text-[17px] md:text-[20px]">
         <input
           aria-label="Titel"
           value={piece.title}
           onChange={e => change(current => ({ ...current, title: e.target.value }))}
-          className="flex-1 min-w-0 bg-transparent font-serif text-text outline-none"
+          className="flex-1 min-w-0 bg-transparent font-bold tracking-tight text-text outline-none"
         />
         {tools && (
           <>
@@ -148,14 +149,14 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
           </>
         )}
         <button type="button" aria-label="Einstellungen des Stücks" aria-expanded={settings} onClick={() => setSettings(!settings)} className={cn(ICON_BUTTON, settings && 'text-accent')}><Settings2 {...ICON} /></button>
-        <button type="button" onClick={() => { setTools(!tools); setSelected(null); }} className={cn(TEXT_BUTTON, 'text-text')}>
+        <button type="button" onClick={() => { setTools(!tools); setSelected(null); }} className={TEXT_BUTTON}>
           {tools ? 'Fertig' : 'Korrigieren'}
         </button>
       </header>
 
       {settings && (
-        <div className="shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 py-3 border-b border-line">
-          <label className={cn(KICKER, 'flex flex-col gap-1')}>Takt
+        <div className="slide-up shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-3 md:px-6">
+          <label className={cn(LABEL, 'flex flex-col gap-1')}>Takt
             <div className="flex items-center gap-1 text-text">
               <select aria-label="Schläge pro Takt" value={piece.beats} onChange={e => change(p => ({ ...p, beats: Number(e.target.value) }))} className={cn(INPUT, 'flex-1')}>
                 {BEATS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -166,14 +167,14 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
               </select>
             </div>
           </label>
-          <label className={cn(KICKER, 'flex flex-col gap-1')}>Tempo
+          <label className={cn(LABEL, 'flex flex-col gap-1')}>Tempo
             <input
               type="number" min={20} max={300} value={piece.bpm}
               onChange={e => change(p => ({ ...p, bpm: Math.max(1, Number(e.target.value) || 1) }))}
               className={INPUT}
             />
           </label>
-          <label className={cn(KICKER, 'flex flex-col gap-1 col-span-2')}>Tonart
+          <label className={cn(LABEL, 'flex flex-col gap-1 col-span-2')}>Tonart
             <select value={piece.key} onChange={e => change(p => ({ ...p, key: Number(e.target.value) }))} className={INPUT}>
               {KEY_CHOICES.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
             </select>
@@ -181,28 +182,31 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
         </div>
       )}
 
-      <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto bg-paper">
-        <div className="mx-auto max-w-5xl px-1 sm:px-8 py-4 sm:py-8">
+      <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto md:px-6 md:pb-4">
+        <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
           <Sheet piece={piece} selected={selected} follow={follow} onSelect={select} />
         </div>
       </div>
 
       {tools && (
-        <>
-          <div className="shrink-0 border-t border-line px-3 pt-1 pb-2 space-y-1">
+        <div className="slide-up shrink-0">
+          <div className="mx-auto w-full max-w-3xl space-y-2 px-3 py-2">
             <Choice items={HANDS} value={hand} onChange={h => { setHand(h); setSelected(null); setChord(new Set()); }} />
-            <div className="grid grid-cols-[repeat(6,minmax(0,1fr))_2rem_2rem] gap-1">
-              {DURATIONS.map(d => (
-                <Chip key={d.id} on={shownDur === d.id} label={d.name} onClick={() => pickLength(d.id, shownDotted)}>{d.label}</Chip>
-              ))}
-              <Chip on={shownDotted} label="Punktiert" onClick={() => pickLength(shownDur, !shownDotted)}>•</Chip>
-              <Chip on={shownTie} label="Mit nächster Note verbinden" onClick={pickTie}>⌒</Chip>
+            <div className="flex items-center gap-2">
+              <Choice
+                className="flex-1 min-w-0"
+                items={DURATIONS.map(d => ({ id: d.id, name: d.name, label: <NoteIcon duration={d.id} /> }))}
+                value={shownDur}
+                onChange={d => pickLength(d, shownDotted)}
+              />
+              <Toggle on={shownDotted} label="Punktiert" onClick={() => pickLength(shownDur, !shownDotted)} className="w-9 px-0"><DotIcon /></Toggle>
+              <Toggle on={shownTie} label="Mit nächster Note verbinden" onClick={pickTie} className="w-9 px-0"><TieIcon /></Toggle>
             </div>
 
             {event ? (
               <>
                 <div className="flex items-center gap-3 min-h-7">
-                  <span className="flex-1 min-w-0 text-xs text-dim break-words">
+                  <span className="flex-1 min-w-0 text-[13px] text-dim break-words">
                     {event.keys.length ? event.keys.map(k => label(k, piece.key, event.spell?.[k])).join(' · ') : 'Pause'} – Tasten ändern den Akkord
                   </span>
                   {blackKeys.map(k => {
@@ -213,7 +217,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
                       <button
                         key={k} type="button"
                         onClick={() => change(current => setSpelling(current, hand, event.id, k, isFlat ? '#' : 'b'))}
-                        className="shrink-0 min-h-7 text-xs text-text underline decoration-accent underline-offset-4"
+                        className="shrink-0 min-h-7 text-[13px] font-medium text-accent"
                       >
                         {isFlat ? flat : sharp} ändern
                       </button>
@@ -227,16 +231,16 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
                   <button type="button" aria-label="Kopieren" onClick={copyEvent} className={ICON_BUTTON}><Copy {...ICON} /></button>
                   <button type="button" aria-label="Ganzen Takt ans Ende kopieren" onClick={() => change(c => appendBarOf(c, hand, event.id))} className={ICON_BUTTON}><CopyPlus {...ICON} /></button>
                   <button type="button" aria-label="Löschen" onClick={remove} className={cn(ICON_BUTTON, 'text-danger')}><Trash2 {...ICON} /></button>
-                  <button type="button" aria-label="Auswahl beenden" onClick={() => setSelected(null)} className={cn(ICON_BUTTON, 'text-text')}><Check {...ICON} /></button>
+                  <button type="button" aria-label="Auswahl beenden" onClick={() => setSelected(null)} className={ICON_BUTTON}><Check {...ICON} /></button>
                 </div>
               </>
             ) : (
-              <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3">
-                <button type="button" disabled={!chord.size} onClick={() => write([...chord])} className={cn(BUTTON, 'min-h-10 px-2')}>
+              <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
+                <button type="button" disabled={!chord.size} onClick={() => write([...chord])} className={cn(BUTTON, 'min-h-10 px-2 text-sm')}>
                   {chord.size > 1 ? `Akkord (${chord.size}) eintragen` : 'Eintragen'}
                 </button>
-                <Chip on={instant} onClick={() => { setInstant(!instant); setChord(new Set()); }}>Sofort</Chip>
-                <button type="button" onClick={() => write([])} className="min-h-10 text-xs tracking-wide text-dim">Pause</button>
+                <Toggle on={instant} onClick={() => { setInstant(!instant); setChord(new Set()); }} className="min-h-10">Sofort</Toggle>
+                <button type="button" onClick={() => write([])} className="min-h-10 rounded-[11px] bg-track px-3 text-[13px] font-medium text-dim">Pause</button>
                 <button type="button" aria-label="Letzte Note entfernen" disabled={!piece.hands[hand].length} onClick={() => change(c => removeLast(c, hand))} className={ICON_BUTTON}>
                   <Trash2 {...ICON} />
                 </button>
@@ -245,7 +249,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
           </div>
 
           <Keyboard marked={event ? new Set(event.keys) : chord} reveal={event?.keys[0]} keySig={piece.key} onKey={tapKey} className="h-24 sm:h-32" />
-        </>
+        </div>
       )}
     </div>
   );

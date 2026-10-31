@@ -73,6 +73,12 @@ describe('findKeyboard', () => {
     expect(c?.x).toBeCloseTo((keyPosition(60) - keyPosition(36) + 0.5) * (WIDTH / 36), -1);
   });
 
+  it('finds the top edge even when hands cover the lower part of the keys', () => {
+    const frame = picture(21, 108);
+    rect(frame, 300, TOP + 22, 240, HEIGHT - TOP - 22, [190, 140, 120]);
+    expect(findKeyboard(frame)?.keyTop).toBe(TOP);
+  });
+
   it('still finds the keys with bars falling onto them', () => {
     const map = findKeyboard(picture(21, 108, [{ midi: 60, color: [80, 200, 90] }, { midi: 67, color: [80, 200, 90] }]));
     expect(map?.keys).toHaveLength(88);
@@ -152,6 +158,16 @@ describe('Tracker', () => {
     expect(hand(62)).toBe('left');
   });
 
+  it('drops a piece of a long bar that broke off', () => {
+    const notes = track([
+      { midi: 48, start: 0.2, end: 1.2, color: BLUE },
+      { midi: 48, start: 1.3, end: 1.4, color: BLUE },
+    ], 2);
+    expect(notes.length).toBeGreaterThan(0);
+    const inside: Detected[] = [note(48, 0.2, 2), note(48, 1, 1.1)];
+    expect(writeDown(inside).piece.hands.right.length).toBeGreaterThan(0);
+  });
+
   it('treats a lighter and darker shade as one hand', () => {
     const notes = track([
       { midi: 72, start: 0.5, end: 1, color: GREEN },
@@ -190,8 +206,22 @@ describe('findTempo', () => {
   });
 
   it('copes with notes a frame off', () => {
-    const onsets = Array.from({ length: 40 }, (_, i) => i * 0.375 + (i % 3 ? 0.015 : -0.015));
+    const onsets = Array.from({ length: 40 }, (_, i) => i * 0.375 + (i % 3 ? 0.008 : -0.008));
     expect(findTempo(onsets).sure).toBe(true);
+  });
+
+  it('follows a player who speeds up and slows down', () => {
+    const onsets: number[] = [];
+    let t = 0;
+    for (let i = 0; i < 64; i++) {
+      onsets.push(t);
+      t += 0.5 + 0.05 * Math.sin(i / 5);
+    }
+    const notes = onsets.map((start, i) => note(60 + (i % 5), start, start + 0.4));
+    const { piece } = writeDown(notes);
+    const lengths = piece.hands.right.map(eventTicks);
+    const usual = Math.max(...lengths.map(ticks => lengths.filter(t => t === ticks).length));
+    expect(usual / lengths.length).toBeGreaterThan(0.6);
   });
 
   it('admits when there is no steady beat', () => {

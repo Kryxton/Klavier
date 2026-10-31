@@ -3,7 +3,7 @@ import { Pause, Play, Repeat, SkipBack } from 'lucide-react';
 import { Falling } from '../components/Falling';
 import { Keyboard } from '../components/Keyboard';
 import { Sheet } from '../components/Sheet';
-import { BUTTON, Chip, Choice, Empty, ICON_BUTTON, INPUT, KICKER } from '../components/ui';
+import { Choice, Empty, ICON_BUTTON, INPUT, SHEET, Toggle } from '../components/ui';
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
 import { HIGHEST, LOWEST } from '../utils/notes';
@@ -67,51 +67,53 @@ export function Practice({ piece }: { piece: Piece }) {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-line">
-        <h1 className="flex-1 min-w-0 font-serif text-2xl text-text break-words">{piece.title || 'Ohne Titel'}</h1>
-        <Choice items={VIEWS} value={view} onChange={setView} className="w-36 shrink-0" />
+      <header className="shrink-0 flex items-center gap-3 px-4 py-2 md:px-6">
+        <h1 className="flex-1 min-w-0 truncate text-[17px] font-bold tracking-tight md:text-[20px]">{piece.title || 'Ohne Titel'}</h1>
+        <Choice items={VIEWS} value={view} onChange={setView} className="w-40 shrink-0" />
       </header>
 
       {view === 'falling' ? (
-        <>
-          <div className="flex-1 min-h-0 bg-ink">
-            <Falling player={player} sounds={sounds} low={low} high={high} ticksPerBar={ticks} hands={hands} />
+        <div className="flex-1 min-h-0 flex flex-col md:px-6 md:pb-4">
+          <div className={cn(SHEET, 'flex-1 min-h-0 overflow-hidden flex flex-col')}>
+            <div className="flex-1 min-h-0">
+              <Falling player={player} sounds={sounds} low={low} high={high} ticksPerBar={ticks} hands={hands} />
+            </div>
+            <Keyboard low={low} high={high} fit active={active.keys} className="h-16 sm:h-24 border-t border-line" />
           </div>
-          <Keyboard low={low} high={high} fit active={active.keys} className="h-16 sm:h-24" />
-        </>
+        </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-auto bg-paper">
-          <div className="mx-auto max-w-5xl px-1 sm:px-8 py-4 sm:py-8">
+        <div className="flex-1 min-h-0 overflow-auto md:px-6 md:pb-4">
+          <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
             <Sheet piece={piece} active={active.events} follow={[...active.events][0]} />
           </div>
         </div>
       )}
 
-      <div className="shrink-0 border-t border-line px-3 py-1.5 space-y-1">
-        <div className="flex items-center gap-2">
-          <button type="button" aria-label={running ? 'Anhalten' : 'Abspielen'} onClick={toggle} className={cn(BUTTON, 'w-12 min-h-11 px-0')}>
-            {running ? <Pause className="w-4 h-4" strokeWidth={1.5} /> : <Play className="w-4 h-4" strokeWidth={1.5} />}
+      <div className="shrink-0 px-3 py-2">
+        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-3 gap-y-2">
+          <button type="button" aria-label={running ? 'Anhalten' : 'Abspielen'} onClick={toggle} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+            {running ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="ml-0.5 h-5 w-5" fill="currentColor" />}
           </button>
           <button type="button" aria-label="Zum Anfang" onClick={() => player.seek(loop?.from ?? 0)} className={ICON_BUTTON}>
-            <SkipBack className="w-5 h-5" strokeWidth={1.25} />
+            <SkipBack className="h-5 w-5" />
           </button>
-          <span className="shrink-0 w-[4.5rem] text-xs text-dim tabular-nums">Takt {bar} / {bars}</span>
-          <label className={cn(KICKER, 'flex-1 min-w-0 flex items-center gap-2 tracking-normal')}>
-            <span className="shrink-0 w-9 text-right">{speed} %</span>
+          <span className="shrink-0 text-[13px] text-dim tabular-nums">Takt {bar} von {bars}</span>
+          <label className="flex flex-1 min-w-[8rem] items-center gap-2 text-[13px] text-dim">
+            <span className="shrink-0 w-10 text-right tabular-nums">{speed} %</span>
             <input
               type="range" min={25} max={125} step={5} value={speed} aria-label="Tempo in Prozent"
               onChange={e => setSpeed(Number(e.target.value))}
               className="flex-1 min-w-0 accent-accent"
             />
           </label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Choice items={HANDS} value={hands} onChange={setHands} className="flex-1 min-w-0" />
-          <Chip on={looping} label="Takte wiederholen" onClick={() => setLooping(!looping)} className="w-10 shrink-0 flex items-center justify-center">
-            <Repeat className="w-4 h-4" strokeWidth={1.25} />
-          </Chip>
-          <input type="number" aria-label="Schleife von Takt" min={1} max={bars} value={from} onChange={e => setFrom(Number(e.target.value))} className={cn(INPUT, 'w-9 shrink-0 text-center')} />
-          <input type="number" aria-label="Schleife bis Takt" min={1} max={bars} value={to} onChange={e => setTo(Number(e.target.value))} className={cn(INPUT, 'w-9 shrink-0 text-center')} />
+          <div className="flex w-full items-center gap-2 lg:w-auto">
+            <Choice items={HANDS} value={hands} onChange={setHands} className="flex-1 min-w-0 lg:w-56 lg:flex-none" />
+            <Toggle on={looping} label="Takte wiederholen" onClick={() => setLooping(!looping)} className="w-9 shrink-0 px-0">
+              <Repeat className="h-4 w-4" />
+            </Toggle>
+            <input type="number" aria-label="Schleife von Takt" min={1} max={bars} value={from} onChange={e => setFrom(Number(e.target.value))} className={cn(INPUT, 'w-12 shrink-0 px-1 py-1.5 text-center')} />
+            <input type="number" aria-label="Schleife bis Takt" min={1} max={bars} value={to} onChange={e => setTo(Number(e.target.value))} className={cn(INPUT, 'w-12 shrink-0 px-1 py-1.5 text-center')} />
+          </div>
         </div>
       </div>
     </div>

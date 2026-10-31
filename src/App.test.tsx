@@ -24,7 +24,7 @@ function startPiece() {
 describe('App', () => {
   it('starts on the list when nothing is open', () => {
     render(<App />);
-    expect(screen.getByRole('button', { name: 'Video auswählen' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Video in Noten/ })).toBeTruthy();
   });
 
   it('writes a chord with the chosen length', () => {

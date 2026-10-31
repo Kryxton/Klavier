@@ -10,7 +10,10 @@ export interface Detected {
 }
 
 const CHANGE = 90; // sum of the colour channels: how far from the usual picture counts as a bar
-const MIN_FRAMES = 2; // shorter flickers aren't notes
+const MIN_SECONDS = 0.03; // shorter flickers aren't notes
+const LONG_SECONDS = 0.2; // bars this long are surely real
+const NEARBY = 8; // seconds
+const FAINT = 0.65; // share of a real bar's brightness below which something isn't a bar
 
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -21,13 +24,13 @@ const median = (values: number[]) => {
 // held a lot is under a bar in half of the pictures, in one colour or another. Colours are counted
 // in coarse bins, on two shifted grids: a background right on a bin border would otherwise split
 // in two and lose against a bar.
-function usualColour(frames: Uint8Array[], probe: number) {
+function usualColour(frames: Uint8Array[], place: number) {
   let best = [0, 0, 0];
   let bestCount = 0;
   for (const shift of [0, 8]) {
     const counts = new Map<number, number>();
     for (const frame of frames) {
-      const bin = (c: number) => (Math.min(255, frame[probe * 3 + c] + shift)) >> 4;
+      const bin = (c: number) => (Math.min(255, frame[place * 3 + c] + shift)) >> 4;
       const id = bin(0) << 8 | bin(1) << 4 | bin(2);
       const count = (counts.get(id) ?? 0) + 1;
       counts.set(id, count);
@@ -92,92 +95,170 @@ function assignHands(notes: (Omit<Detected, 'hand'> & { hue: number | null })[])
   }));
 }
 
-// Reads the row above the keys, picture by picture, and turns what passes there into notes: a bar
-// reaching the row is a note starting, its end passing the row is the note ending.
+interface Run {
+  from: number;
+  to: number;
+}
+
+// One falling bar, followed from picture to picture while it passes the row
+interface Bar {
+  run: Run;
+  first: number; // frame
+  last: number;
+  centres: number[];
+  colours: number[][];
+}
+
+// Reads the row above the keys, picture by picture. Bars are followed as whole objects: the key is
+// decided once a bar has passed, from its usual place and width. Reading single pictures can't work,
+// because a wide bar on a white key reaches over the black key next to it and its rounded ends look
+// like narrow bars for a moment.
 export class Tracker {
   private keys: KeyMap;
-  private probes: { key: number; x: number }[] = [];
-  private frames: Uint8Array[] = [];
+  private rows: Uint8Array[] = [];
   private times: number[] = [];
+  private shown: boolean[] = [];
+  private width = 0;
 
   constructor(keys: KeyMap) {
     this.keys = keys;
-    // A wide bar on a white key reaches the middle of the black key next to it. So a black key is
-    // read at two places left and right of its middle: only a bar of its own covers both.
-    keys.keys.forEach((key, index) => {
-      if (isBlack(key.midi)) {
-        this.probes.push({ key: index, x: key.x - keys.unit * 0.17 }, { key: index, x: key.x + keys.unit * 0.17 });
-      } else this.probes.push({ key: index, x: key.x });
-    });
   }
 
-  // `row` holds the pixels of the scan row
-  add(row: Frame, time: number) {
-    const reach = Math.max(1, Math.floor(this.keys.unit * 0.06));
-    const colours = new Uint8Array(this.probes.length * 3);
-    this.probes.forEach((probe, p) => {
-      const sum = [0, 0, 0];
-      let count = 0;
-      const middle = Math.round(probe.x);
-      for (let x = middle - reach; x <= middle + reach; x++) {
-        if (x < 0 || x >= row.width) continue;
-        const i = x * 4;
-        sum[0] += row.data[i];
-        sum[1] += row.data[i + 1];
-        sum[2] += row.data[i + 2];
-        count++;
-      }
-      for (let c = 0; c < 3; c++) colours[p * 3 + c] = count ? sum[c] / count : 0;
-    });
-    this.frames.push(colours);
+  // Are the black keys where they should be? Transitions, ads and the end of a video have no
+  // keyboard; what passes the row then isn't music. Hands hide some keys, so a majority is enough.
+  private keyboardShown(row: Frame) {
+    const luma = (x: number) => {
+      const i = Math.max(0, Math.min(row.width - 1, Math.round(x))) * 4;
+      return 0.3 * row.data[i] + 0.59 * row.data[i + 1] + 0.11 * row.data[i + 2];
+    };
+    const { keys, unit } = this.keys;
+    const blacks = keys.filter(key => isBlack(key.midi));
+    const dark = blacks.filter(key => luma(key.x) < 0.75 * Math.max(luma(key.x - unit * 0.5), luma(key.x + unit * 0.5)));
+    return dark.length >= blacks.length * 0.5;
+  }
+
+  // `row` holds the pixels of the scan row, `keyRow` a row through the black keys
+  add(row: Frame, time: number, keyRow?: Frame) {
+    this.width = row.width;
+    const rgb = new Uint8Array(row.width * 3);
+    for (let x = 0; x < row.width; x++) {
+      rgb[x * 3] = row.data[x * 4];
+      rgb[x * 3 + 1] = row.data[x * 4 + 1];
+      rgb[x * 3 + 2] = row.data[x * 4 + 2];
+    }
+    this.rows.push(rgb);
     this.times.push(time);
+    this.shown.push(keyRow ? this.keyboardShown(keyRow) : true);
   }
 
-  // Per frame: is this probe off its usual colour?
-  private litProbes() {
-    return this.probes.map((_, p) => {
-      const usual = usualColour(this.frames, p);
-      return this.frames.map(f =>
-        Math.abs(f[p * 3] - usual[0]) + Math.abs(f[p * 3 + 1] - usual[1]) + Math.abs(f[p * 3 + 2] - usual[2]) > CHANGE);
+  // The stretches of one row that differ from the usual picture; a wide one is several bars side by side
+  private runsOf(row: Uint8Array, usual: number[][]) {
+    const { unit } = this.keys;
+    const runs: Run[] = [];
+    let from = -1;
+    for (let x = 0; x <= this.width; x++) {
+      const lit = x < this.width
+        && Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2]) > CHANGE;
+      if (lit && from < 0) from = x;
+      if (!lit && from >= 0) {
+        const width = x - from;
+        if (width >= unit * 0.3) {
+          const parts = width >= unit * 1.6 ? Math.round(width / unit) : 1;
+          for (let p = 0; p < parts; p++) {
+            runs.push({ from: from + (p * width) / parts, to: from + ((p + 1) * width) / parts - 1 });
+          }
+        }
+        from = -1;
+      }
+    }
+    return runs;
+  }
+
+  private followBars(usual: number[][]) {
+    const done: Bar[] = [];
+    let open: Bar[] = [];
+    this.rows.forEach((row, f) => {
+      const runs = this.shown[f] ? this.runsOf(row, usual) : [];
+      const next: Bar[] = [];
+      for (const run of runs) {
+        const bar = open.find(b => {
+          const overlap = Math.min(b.run.to, run.to) - Math.max(b.run.from, run.from);
+          return overlap >= 0.5 * Math.min(b.run.to - b.run.from, run.to - run.from);
+        });
+        const centre = (run.from + run.to) / 2;
+        const i = Math.round(centre) * 3;
+        const colour = [row[i], row[i + 1], row[i + 2]];
+        if (bar) {
+          open = open.filter(b => b !== bar);
+          bar.run = run;
+          bar.last = f;
+          bar.centres.push(centre);
+          bar.colours.push(colour);
+          next.push(bar);
+        } else {
+          next.push({ run, first: f, last: f, centres: [centre], colours: [colour] });
+        }
+      }
+      done.push(...open);
+      open = next;
     });
+    done.push(...open);
+    return done.filter(bar => bar.last > bar.first && this.times[bar.last] - this.times[bar.first] >= MIN_SECONDS);
+  }
+
+  // Which key a bar stands for: the nearest one. The middle of a bar is steady to a pixel or two,
+  // much better than its width, which changes with glow and rounded ends.
+  private keyOf(centre: number) {
+    const { keys, unit } = this.keys;
+    let best = keys[0];
+    for (const key of keys) {
+      if (Math.abs(key.x - centre) < Math.abs(best.x - centre)) best = key;
+    }
+    return Math.abs(best.x - centre) < unit * 0.6 ? best : null;
   }
 
   finish(): Detected[] {
     // Pictures read later to fill holes arrive out of order
     const order = this.times.map((_, i) => i).sort((a, b) => this.times[a] - this.times[b]);
-    this.frames = order.map(i => this.frames[i]);
+    this.rows = order.map(i => this.rows[i]);
     this.times = order.map(i => this.times[i]);
+    this.shown = order.map(i => this.shown[i]);
 
-    const lit = this.litProbes();
-    const probesOf = (key: number) => this.probes.flatMap((probe, p) => (probe.key === key ? [p] : []));
-    const whiteAt = (key: number) => probesOf(key)[0];
-    const count = this.keys.keys.length;
-    const litKey = this.keys.keys.map((key, k) => {
-      const probes = probesOf(k);
-      if (!isBlack(key.midi)) return lit[probes[0]];
-      // Both white neighbours lit from two bars side by side looks the same as a black bar
-      const left = k > 0 ? lit[whiteAt(k - 1)] : null;
-      const right = k < count - 1 ? lit[whiteAt(k + 1)] : null;
-      return this.frames.map((_, f) => lit[probes[0]][f] && lit[probes[1]][f] && !(left?.[f] && right?.[f]));
+    const usual = Array.from({ length: this.width }, (_, x) => usualColour(this.rows, x));
+    const bars = this.followBars(usual);
+
+    const found = bars.flatMap(bar => {
+      const key = this.keyOf(median(bar.centres));
+      if (!key) return [];
+      const colour = [0, 1, 2].map(c => median(bar.colours.map(s => s[c])));
+      const place = Math.round(median(bar.centres));
+      // The brightest moment counts: short bars are blurred for most of their way
+      const changes = bar.colours.map(c => c.reduce((sum, value, i) => sum + Math.abs(value - usual[place][i]), 0)).sort((a, b) => a - b);
+      const strength = changes[Math.floor(changes.length * 0.8)];
+      return [{ key, bar, strength, hue: hueOf(colour) }];
     });
 
-    const notes: (Omit<Detected, 'hand'> & { hue: number | null })[] = [];
-    this.keys.keys.forEach((key, k) => {
-      const probe = probesOf(k)[0];
-      let start = -1;
-      for (let f = 0; f <= this.frames.length; f++) {
-        const on = f < this.frames.length && litKey[k][f];
-        if (on && start < 0) start = f;
-        if (!on && start >= 0) {
-          if (f - start >= MIN_FRAMES) {
-            const span = this.frames.slice(start, f);
-            const colour = [0, 1, 2].map(c => median(span.map(s => s[probe * 3 + c])));
-            notes.push({ midi: key.midi, start: this.times[start], end: this.times[f - 1], hue: hueOf(colour) });
-          }
-          start = -1;
-        }
-      }
-    });
-    return assignHands(notes).sort((a, b) => a.start - b.start || a.midi - b.midi);
+    // Sparks and dust behind the bars are much fainter than the bars. Long bars show how bright a
+    // real one is, for black and white keys apart, because many videos draw them in two shades.
+    // Nearby ones count first, because intros often fade in.
+    const long = found.filter(f => this.times[f.bar.last] - this.times[f.bar.first] >= LONG_SECONDS);
+    const reference = (f: (typeof found)[number]) => {
+      const same = long.filter(l => isBlack(l.key.midi) === isBlack(f.key.midi));
+      const near = same.filter(l => Math.abs(this.times[l.bar.first] - this.times[f.bar.first]) < NEARBY);
+      const pool = near.length >= 3 ? near : same;
+      return pool.length >= 3 ? median(pool.map(l => l.strength)) : 0;
+    };
+    const notes = found
+      .filter(f => f.strength >= FAINT * reference(f))
+      .map(f => ({ midi: f.key.midi, start: this.times[f.bar.first], end: this.times[f.bar.last], hue: f.hue }));
+    // Where the bars have a colour, something white or grey is no bar: the player's pause symbol,
+    // text faded in over the video
+    const coloured = notes.filter(note => note.hue !== null);
+    const kept = coloured.length >= notes.length * 0.7 ? coloured : notes;
+    // A long bar sometimes breaks up around its edge; pieces inside it aren't notes of their own
+    const whole = kept.filter(note => !kept.some(other =>
+      other !== note && other.midi === note.midi && other.start <= note.start && other.end >= note.end
+      && other.end - other.start > note.end - note.start));
+    return assignHands(whole).sort((a, b) => a.start - b.start || a.midi - b.midi);
   }
 }

@@ -5,8 +5,8 @@ import type { Sound } from '../utils/score';
 import type { HandChoice } from '../utils/usePlayer';
 
 const PX_PER_TICK = 1.4;
-const COLORS = { right: '#bfa27a', left: '#6f7a86' };
-const SOUNDING = { right: '#f5f0e6', left: '#c3ccd6' };
+const COLORS = { right: '#c8202d', left: '#17181b' };
+const SOUNDING = { right: '#e8606a', left: '#55585f' };
 
 // The notes falling onto the keys, like in the tutorials: the bottom edge of the canvas is the top
 // edge of the keyboard. Draws only when the position or size changed.
@@ -38,7 +38,7 @@ export function Falling({ player, sounds, low, high, ticksPerBar, hands }: {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillStyle = 'rgba(23,24,27,0.07)';
       for (let midi = low; midi <= high; midi++) {
         if (midi % 12 === 0) ctx.fillRect(keyBox(midi, low, high).left * width, 0, 1, height);
       }
@@ -57,7 +57,7 @@ export function Falling({ player, sounds, low, high, ticksPerBar, hands }: {
         ctx.fillStyle = sounding ? SOUNDING[sound.hand] : COLORS[sound.hand];
         const inset = isBlack(sound.midi) ? 0 : 1;
         ctx.beginPath();
-        ctx.roundRect(box.left * width + inset, top, Math.max(2, box.width * width - inset * 2), Math.max(3, bottom - top - 1), 1);
+        ctx.roundRect(box.left * width + inset, top, Math.max(2, box.width * width - inset * 2), Math.max(3, bottom - top - 1), 3);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
