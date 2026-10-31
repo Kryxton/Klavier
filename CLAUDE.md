@@ -76,9 +76,9 @@ the file had a 13 s hole, which looked exactly like a bug in the reading.
 - **Never tried with a real YouTube tutorial or on iPhone/iPad/Safari.** All tests so far use
   generated videos in Chrome. First thing to do when the user sends a recording.
 - Vercel, see Hosting. Then cloud sync (same Supabase project, own table, SQL file the user runs).
-- Getting the video in: file upload only so far, a screen recording is the way from YouTube. On the
-  PC reading the running tab (`getDisplayMedia`) would save that step. Pasting a YouTube link is
-  not planned: needs a server that downloads from YouTube, against their terms and fragile.
+- Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
+  A YouTube link was discussed and declined: reading the running tab works only on the PC, a
+  download server is against YouTube's terms and fragile.
 - The reading always writes 4/4, sixteenths at the finest, one voice per hand. Missing: 3/4 and 6/8,
   triplets, rubato (shows „keinen gleichmäßigen Takt“), held notes under a melody.
 - Not yet: slurs, dynamics, pedal, repeat signs, PNG/PDF export (the old site had PNG), keyboard
