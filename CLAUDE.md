@@ -237,6 +237,8 @@ from real Chrome replay the tracker in seconds instead of minutes.
 - The switch „Original“, the brown notes, cancelling and the live site were checked up to commit
   903de64 on the branch `vergleich`; the beat chain with its place in the bar came after that and
   is checked by the yardstick and tests, not yet with both recordings on the live address.
+- A machine-made piece that suddenly changes tempo by 20 % loses the one grid and the played count
+  follows too slowly: the test `follows a machine-made piece into a new tempo` is skipped for that.
 - At 11 pictures a second the tempo reading of machine-made pieces still fails (19 are fine).
   `ENOUGH` slows the video down well before that.
 - Not yet: slurs, dynamics, repeat signs, keyboard shortcuts on the PC, a pedal written in the score.
