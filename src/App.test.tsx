@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { Hand, Piece } from './types';
@@ -12,6 +12,7 @@ vi.mock('./utils/audio', () => ({
   audioClock: { now: () => 0, play: vi.fn(), click: vi.fn(), silence: vi.fn() },
 }));
 vi.mock('./components/Sheet', () => ({
+  PrintSheet: ({ piece }: { piece: Piece }) => <p>Druckansicht {piece.title}</p>,
   Sheet: ({ piece, onSelect, onBar }: { piece: Piece; onSelect?: (hand: Hand, id: string) => void; onBar?: (bar: number) => void }) => (
     <>
       {onBar
@@ -272,6 +273,31 @@ describe('App', () => {
     tap('Abspielen');
     expect(vi.mocked(audioClock.click).mock.calls[0]).toEqual([0, true]);
     expect(vi.mocked(audioClock.play)).not.toHaveBeenCalled();
+  });
+
+  it('has all of the score ready when it prints', async () => {
+    window.print = vi.fn(() => expect(screen.getByText(/^Druckansicht/)).toBeTruthy());
+    startPractice();
+    tap('Notenblatt');
+    tap('Drucken');
+    await waitFor(() => expect(window.print).toHaveBeenCalled());
+  });
+
+  it('prepares the print view for the browser menu too, and drops it after a change', () => {
+    startPractice();
+    tap('Notenblatt');
+    expect(screen.queryByText(/^Druckansicht/)).toBeNull();
+    fireEvent(window, new Event('beforeprint'));
+    expect(screen.getByText('Druckansicht Probe')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Titel' }), { target: { value: 'Neu' } });
+    expect(screen.queryByText(/^Druckansicht/)).toBeNull();
+  });
+
+  it('offers printing only outside of correcting', () => {
+    startPractice();
+    tap('Notenblatt');
+    tap('Korrigieren');
+    expect(screen.queryByRole('button', { name: 'Drucken' })).toBeNull();
   });
 
   it('asks before deleting a piece', () => {

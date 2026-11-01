@@ -142,6 +142,72 @@ input[type="number"]::-webkit-outer-spin-button {
   appearance: none;
 }
 
+/* On paper only the score, on A4. Without page margins the browser adds no date and address, the
+   margins come from the sheets themselves. */
+@page {
+  size: A4;
+  margin: 0;
+}
+.print-view {
+  position: fixed;
+  left: -300vw;
+  top: 0;
+  width: 182mm;
+  visibility: hidden;
+}
+.print-sheet {
+  padding: 14mm;
+  box-sizing: content-box;
+  width: 182mm;
+  color: #000;
+}
+.print-sheet header {
+  text-align: center;
+}
+/* Two lines at the most: PAPER_HEIGHT leaves room for the second, a third could push a line off */
+.print-sheet h1 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.print-sheet header p {
+  margin: 6pt 0 10pt;
+  text-align: left;
+  font-size: 10pt;
+}
+.print-sheet .print-running {
+  text-align: right;
+  font-size: 9pt;
+  color: #555;
+}
+@media print {
+  html,
+  body {
+    background: #fff;
+  }
+  #root:has(~ .print-view) {
+    display: none;
+  }
+  .print-view {
+    position: static;
+    width: auto;
+    visibility: visible;
+  }
+  .print-sheet {
+    break-after: page;
+  }
+  .print-sheet:last-child {
+    break-after: auto;
+  }
+  .print-line {
+    break-inside: avoid;
+  }
+}
+
 /* The score: VexFlow draws with fill and stroke on each part of a note */
 /* Each line is its own picture; notes far below the staves reach into the next one */
 .sheet svg {

@@ -1,8 +1,10 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Accidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, StaveTie, Voice } from 'vexflow';
 import type { Hand, Piece } from '../types';
 import type { Bars } from '../utils/edit';
 import { keyName, keySignature, signFor, spell } from '../utils/notes';
+import { paginate } from '../utils/print';
 import { barTicks, toBars, type Printed } from '../utils/score';
 
 type Clef = 'treble' | 'bass';
@@ -19,6 +21,12 @@ const NOTE_ROOM = 28; // px a note takes in a bar, at the least
 const SIGN_ROOM = 14;
 const DOT_ROOM = 8;
 const DRAW_AHEAD = 900; // px beyond the screen where lines are already drawn
+const PAPER_WIDTH = 688; // px at 96 to the inch: A4 less 14 mm on each side
+const PAPER_HEIGHT = 970; // px, a little short of A4: not every browser gives the whole sheet
+const PAPER_SCALE = 0.72; // staves of 7.6 mm, the size of printed music
+const TITLE_ROOM = 92; // px on the first sheet
+const HEADER_ROOM = 36; // px on the others
+const WIDEST_GAP = 34; // px between lines where a sheet has room to spare
 
 interface Bar {
   right: Printed[];
@@ -99,8 +107,8 @@ function measure(piece: Piece) {
 type Measured = ReturnType<typeof measure>;
 
 // Bars into lines for this width
-function arrange({ piece, bars }: Measured, width: number) {
-  const scale = width < 360 ? 0.58 : width < 600 ? 0.72 : 1;
+function arrange({ piece, bars }: Measured, width: number, fixedScale?: number) {
+  const scale = fixedScale ?? (width < 360 ? 0.58 : width < 600 ? 0.72 : 1);
   const available = (width - 4) / scale;
   const leadOf = (first: boolean) => {
     const stave = new Stave(0, 0, 500).addClef('treble').addKeySignature(keyName(piece.key));
@@ -402,5 +410,41 @@ export function Sheet({ piece, selected, active, follow, onSelect, bars, onBar }
         </Fragment>
       ))}
     </div>
+  );
+}
+
+// The whole score for paper, whatever the screen is: every line, at the size of printed music, on
+// A4. Exists only around printing and is drawn at once when it appears, because a browser prints
+// what is there the moment it is asked. Hidden on screen, index.css brings it out for paper.
+export function PrintSheet({ piece }: { piece: Piece }) {
+  const host = useRef<HTMLDivElement>(null);
+  const { measured, page, sheets } = useMemo(() => {
+    const measured = measure(piece);
+    const page = arrange(measured, PAPER_WIDTH, PAPER_SCALE);
+    const heights = page.lines.map(line => line.height * PAPER_SCALE);
+    const sheets = paginate(heights, PAPER_HEIGHT - TITLE_ROOM, PAPER_HEIGHT - HEADER_ROOM).map((lines, i, all) => {
+      const used = lines.reduce((sum, line) => sum + heights[line], 0) + (i ? HEADER_ROOM : TITLE_ROOM);
+      const spread = i < all.length - 1 && lines.length > 1 ? (PAPER_HEIGHT - used) / (lines.length - 1) : WIDEST_GAP;
+      return { lines, gap: Math.min(WIDEST_GAP, spread) };
+    });
+    return { measured, page, sheets };
+  }, [piece]);
+
+  useLayoutEffect(() => {
+    host.current?.querySelectorAll<HTMLElement>('[data-line]').forEach(line => drawLine(line, measured, page, Number(line.dataset.line)));
+  }, [measured, page]);
+
+  return createPortal(
+    <div ref={host} className="print-view sheet">
+      {sheets.map(({ lines, gap }, i) => (
+        <section key={i} className="print-sheet">
+          {i === 0
+            ? <header style={{ minHeight: TITLE_ROOM }}><h1>{piece.title || 'Ohne Titel'}</h1><p>♩ = {piece.bpm}</p></header>
+            : <header className="print-running" style={{ height: HEADER_ROOM }}>{piece.title || 'Ohne Titel'} · Seite {i + 1} von {sheets.length}</header>}
+          {lines.map((line, n) => <div key={line} data-line={line} className="print-line" style={{ height: page.lines[line].height * PAPER_SCALE, marginTop: n ? gap : 0 }} />)}
+        </section>
+      ))}
+    </div>,
+    document.body,
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Copy, Plus, Redo2, Settings2, Trash2, Undo2 } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { ArrowLeft, ArrowRight, Check, Copy, Plus, Printer, Redo2, Settings2, Trash2, Undo2 } from 'lucide-react';
 import { BarTools, useBarTool } from '../components/BarTools';
 import { Keyboard } from '../components/Keyboard';
-import { Sheet } from '../components/Sheet';
+import { PrintSheet, Sheet } from '../components/Sheet';
 import { DotIcon, NoteIcon, TieIcon } from '../components/NoteIcons';
 import { BUTTON, Choice, ICON_BUTTON, INPUT, LABEL, SHEET, TEXT_BUTTON, Toggle } from '../components/ui';
 import type { Duration, Hand, Piece } from '../types';
@@ -45,6 +46,8 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   const [settings, setSettings] = useState(false);
   // A piece comes out of a video ready, so the tools stay away until something needs correcting
   const [tools, setTools] = useState(!piece.hands.right.length && !piece.hands.left.length);
+  const [printing, setPrinting] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const barTool = useBarTool(piece, change, setFollow);
 
   const event = piece.hands[hand].find(ev => ev.id === selected) ?? null;
@@ -56,6 +59,25 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   useEffect(() => {
     if (selected && !event) setSelected(null);
   }, [selected, event]);
+
+  // Ctrl+P and the browser's menu end up here as well. The print view stays afterwards, because
+  // not every browser has taken its picture when it says it is done; any change retires it.
+  useEffect(() => {
+    const before = () => flushSync(() => setPrinting(true));
+    window.addEventListener('beforeprint', before);
+    return () => window.removeEventListener('beforeprint', before);
+  }, []);
+  useEffect(() => setPrinting(false), [piece]);
+
+  // One picture first, so that the button can answer before all lines are being drawn
+  const print = () => {
+    setPreparing(true);
+    requestAnimationFrame(() => setTimeout(() => {
+      flushSync(() => setPrinting(true));
+      setPreparing(false);
+      window.print();
+    }));
+  };
 
   const write = (keys: number[]) => {
     let id = '';
@@ -160,6 +182,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
             <button type="button" aria-label="Wiederholen" disabled={!canRedo} onClick={redo} className={ICON_BUTTON}><Redo2 {...ICON} /></button>
           </>
         )}
+        {!tools && <button type="button" aria-label="Drucken" disabled={preparing} onClick={print} className={ICON_BUTTON}><Printer {...ICON} /></button>}
         <button type="button" aria-label="Einstellungen des Stücks" aria-expanded={settings} onClick={() => setSettings(!settings)} className={cn(ICON_BUTTON, settings && 'text-accent')}><Settings2 {...ICON} /></button>
         <button type="button" onClick={() => { setTools(!tools); setSelected(null); barTool.close(); }} className={TEXT_BUTTON}>
           {tools ? 'Fertig' : 'Korrigieren'}
@@ -199,6 +222,8 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
           <Sheet piece={piece} selected={selected} follow={follow} onSelect={select} bars={barTool.marked} onBar={barTool.on ? barTool.tap : undefined} />
         </div>
       </div>
+
+      {printing && <PrintSheet piece={piece} />}
 
       {tools && (
         <div className="slide-up shrink-0">
