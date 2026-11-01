@@ -15,12 +15,13 @@ no AI made it (the black-gold version with spaced capitals and serif italics was
 especially), and work on phone, iPad and laptop.
 
 ## Hosting
-- The rebuild was merged into `main` on 2026-10-30; the user said the old site and its pieces don't
-  need keeping. Branch `alter-editor` = the old site, unchanged (don't delete).
-- GitHub Pages (`kryxton.github.io/Klavier`) still serves the root of `main`, which is unbuilt source
-  now, so it no longer shows the app. Real hosting = Vercel like Life OS: the user connects the repo
-  (`vercel.json` is ready; its content security policy allows the samples on tonejs.github.io), then
-  push to `main` = live, and Pages can be switched off.
+- Live on Vercel: https://klavier-phi.vercel.app (push to `main` = live, the repo was connected
+  before this file was written). GitHub Pages still serves the unbuilt root of `main`, so
+  `kryxton.github.io/Klavier` shows nothing and can be switched off. Branch `alter-editor` = the old
+  site (don't delete).
+- **`vercel.json` sets a content security policy that the dev server doesn't.** Anything new that
+  loads something (a media file, a script, a request) has to be checked on the live address, not
+  only locally: without `media-src blob:` no video could be opened there, and no local test showed it.
 
 ## Stack (same as Latein, no Supabase yet)
 React 19 + TypeScript + Vite (single file) + Tailwind 4, lucide-react, Vitest. VexFlow 4 for the
@@ -94,7 +95,7 @@ project folder; video files are gitignored and must stay out of this public repo
   recording the browser finds about 690 notes, the same code on ffmpeg frames about 850; the
   reason is unknown (the first bars agree). Needs the user's ear, then more recordings.
 - Not tried in Safari on iPhone/iPad at all. Reading takes about the length of the video.
-- Vercel, see Hosting. Then cloud sync (same Supabase project, own table, SQL file the user runs).
+- Cloud sync (same Supabase project, own table, SQL file the user runs).
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
   A YouTube link was discussed and declined: reading the running tab works only on the PC, a
   download server is against YouTube's terms and fragile.
