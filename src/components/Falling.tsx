@@ -12,6 +12,7 @@ const FADED = 0.2; // the hand not being practised
 const EMPTY_RANGE = { low: 48, high: 84 };
 const GLOW = 128; // px of the prepared glow picture
 const MOST_DPR = 2; // sharper costs speed and doesn't show
+const DRAG_START = 6; // px a finger moves before a touch counts as dragging
 
 const whitesIn = (low: number, high: number) => Array.from({ length: high - low + 1 }, (_, i) => low + i).filter(k => !isBlack(k)).length;
 
@@ -102,9 +103,10 @@ function buildGlow(colour: string) {
 
 // The notes falling onto the keys, like in the tutorials, on a dark stage. Keys and notes are one
 // picture, so they can't drift apart and no key has to be redrawn by React while playing. Draws
-// only what changed since the last picture, and only the notes in view.
-export function Falling({ player, sounds, ticksPerBar, hands }: {
-  player: Player; sounds: Sound[]; ticksPerBar: number; hands: HandChoice;
+// only what changed since the last picture, and only the notes in view. Dragging moves them with
+// the finger: down is onward, the way they fall.
+export function Falling({ player, sounds, ticksPerBar, hands, onGrab, onDrop }: {
+  player: Player; sounds: Sound[]; ticksPerBar: number; hands: HandChoice; onGrab: () => void; onDrop: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
@@ -115,6 +117,7 @@ export function Falling({ player, sounds, ticksPerBar, hands }: {
 
     const c = colours();
     const longest = sounds.reduce((most, s) => Math.max(most, s.length), 0);
+    const end = sounds.reduce((last, s) => Math.max(last, s.start + s.length), 0);
     const glows = { right: buildGlow(c.right.white), left: buildGlow(c.left.white) };
     const ahead = ticksPerBar * BARS_SHOWN;
     let frame = 0;
@@ -200,8 +203,40 @@ export function Falling({ player, sounds, ticksPerBar, hands }: {
       ctx.globalCompositeOperation = 'source-over';
     };
     paint();
-    return () => cancelAnimationFrame(frame);
-  }, [player, sounds, ticksPerBar, hands]);
 
-  return <canvas ref={canvas} data-testid="falling" className="block w-full h-full" />;
+    let touch: { id: number; y: number; at: number; dragging: boolean } | null = null;
+    const press = (e: PointerEvent) => {
+      if (touch) return;
+      touch = { id: e.pointerId, y: e.clientY, at: 0, dragging: false };
+      element.setPointerCapture(e.pointerId);
+    };
+    const drag = (e: PointerEvent) => {
+      if (touch?.id !== e.pointerId) return;
+      if (!touch.dragging) {
+        if (Math.abs(e.clientY - touch.y) < DRAG_START) return;
+        onGrab();
+        touch = { ...touch, y: e.clientY, at: player.position(), dragging: true };
+      }
+      const tick = touch.at + ((e.clientY - touch.y) * ahead) / keysTop;
+      player.seek(Math.min(end, Math.max(0, tick)));
+    };
+    const release = (e: PointerEvent) => {
+      if (touch?.id !== e.pointerId) return;
+      if (touch.dragging) onDrop();
+      touch = null;
+    };
+    element.addEventListener('pointerdown', press);
+    element.addEventListener('pointermove', drag);
+    element.addEventListener('pointerup', release);
+    element.addEventListener('pointercancel', release);
+    return () => {
+      cancelAnimationFrame(frame);
+      element.removeEventListener('pointerdown', press);
+      element.removeEventListener('pointermove', drag);
+      element.removeEventListener('pointerup', release);
+      element.removeEventListener('pointercancel', release);
+    };
+  }, [player, sounds, ticksPerBar, hands, onGrab, onDrop]);
+
+  return <canvas ref={canvas} data-testid="falling" className="block w-full h-full cursor-grab touch-none active:cursor-grabbing" />;
 }

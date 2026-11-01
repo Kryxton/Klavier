@@ -13,8 +13,8 @@ const TIMER_MS = 40;
 // only when a note starts or ends, the position is read directly from `player` for drawing. Whoever
 // draws from the position itself sets `followNotes` to false and saves all those redraws. The
 // pedal changes only what is heard: the notes stay as written for everything that shows them.
-export function usePlayer(piece: Piece, { hands, speed, loop, pedal, followNotes }: {
-  hands: HandChoice; speed: number; loop: Loop | null; pedal: boolean; followNotes: boolean;
+export function usePlayer(piece: Piece, { hands, speed, loop, pedal, countIn, followNotes }: {
+  hands: HandChoice; speed: number; loop: Loop | null; pedal: boolean; countIn: boolean; followNotes: boolean;
 }) {
   const player = useRef<Player | null>(null);
   player.current ??= new Player(audioClock);
@@ -61,16 +61,17 @@ export function usePlayer(piece: Piece, { hands, speed, loop, pedal, followNotes
     return () => cancelAnimationFrame(frame);
   }, [current, played, followNotes]);
 
-  const toggle = useCallback(() => {
-    if (current.isRunning()) {
-      current.stop();
-      setRunning(false);
-    } else {
-      unlockAudio();
-      current.start();
-      setRunning(true);
-    }
+  // From a tick, or from where it stands; `tick` while playing means a jump
+  const play = useCallback((tick?: number) => {
+    unlockAudio();
+    current.start(tick, countIn ? { beats, ticks: 192 / beatValue } : undefined);
+    setRunning(true);
+  }, [current, countIn, beats, beatValue]);
+
+  const pause = useCallback(() => {
+    current.stop();
+    setRunning(false);
   }, [current]);
 
-  return { player: current, sounds, running, active, toggle };
+  return { player: current, sounds, running, active, play, pause };
 }

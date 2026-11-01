@@ -9,7 +9,7 @@ import { loadLibrary } from './utils/storage';
 // Sound and the VexFlow score need a real browser; both are checked there
 vi.mock('./utils/audio', () => ({
   playKey: vi.fn(), unlockAudio: vi.fn(),
-  audioClock: { now: () => 0, play: vi.fn(), silence: vi.fn() },
+  audioClock: { now: () => 0, play: vi.fn(), click: vi.fn(), silence: vi.fn() },
 }));
 vi.mock('./components/Sheet', () => ({
   Sheet: ({ piece, onSelect, onBar }: { piece: Piece; onSelect?: (hand: Hand, id: string) => void; onBar?: (bar: number) => void }) => (
@@ -24,6 +24,7 @@ vi.mock('./components/Sheet', () => ({
 beforeEach(() => {
   localStorage.clear();
   vi.mocked(audioClock.play).mockClear();
+  vi.mocked(audioClock.click).mockClear();
   Element.prototype.scrollTo = vi.fn(); // the keyboard scrolls to a selected note, jsdom can't
 });
 afterEach(cleanup);
@@ -45,6 +46,16 @@ function startTwoBars() {
   for (const key of ['C3', 'D3', 'E3', 'F3']) tap(key);
   tap('Sofort');
   tap('Rechte Hand');
+}
+// Two bars of quarters, straight to the Üben page
+function startPractice() {
+  const events = [60, 62, 64, 65, 67, 69, 71, 72].map((key, i) => ({ id: `e${i}`, keys: [key], dur: 'q' }));
+  localStorage.setItem('klavier_pieces', JSON.stringify({
+    pieces: [{ id: 'p', title: 'Probe', beats: 4, beatValue: 4, key: 0, bpm: 60, hands: { right: events, left: [] }, updatedAt: '' }],
+    openId: 'p',
+  }));
+  render(<App />);
+  tap('Üben');
 }
 const right = () => notes().right.map(ev => ev.keys[0] ?? 0);
 const left = () => notes().left.map(ev => ev.keys[0] ?? 0);
@@ -202,6 +213,65 @@ describe('App', () => {
     tap('Pedal');
     tap('Abspielen');
     expect(vi.mocked(audioClock.play).mock.calls[0][2]).toBeCloseTo(written * 4);
+  });
+
+  it('plays from a tapped bar', () => {
+    startPractice();
+    tap('Takt 2');
+    expect(vi.mocked(audioClock.play).mock.calls[0][0].midi).toBe(67);
+    expect(screen.getByRole('button', { name: 'Anhalten' })).toBeTruthy();
+  });
+
+  it('sets a loop by tapping its bars, in any order', () => {
+    startPractice();
+    tap('Takte wiederholen');
+    expect(screen.getByText(/ersten Takt/)).toBeTruthy();
+    tap('Takt 2');
+    expect(screen.getByText(/^Takt 2 –/)).toBeTruthy();
+    tap('Takt 1');
+    expect(screen.getByText('Schleife: Takt 1 bis 2')).toBeTruthy();
+    expect(vi.mocked(audioClock.play)).not.toHaveBeenCalled();
+    tap('Takte wiederholen');
+    expect(screen.queryByText(/Schleife/)).toBeNull();
+  });
+
+  it('loops one bar when it is tapped twice, and starts inside it', () => {
+    startPractice();
+    tap('Takte wiederholen');
+    tap('Takt 2');
+    tap('Takt 2');
+    expect(screen.getByText('Schleife: Takt 2')).toBeTruthy();
+    tap('Abspielen');
+    expect(vi.mocked(audioClock.play).mock.calls[0][0].midi).toBe(67);
+  });
+
+  it('takes a loop on the notes and comes back to the falling view', () => {
+    startPractice();
+    tap('Fallend');
+    expect(screen.getByTestId('falling')).toBeTruthy();
+    tap('Takte wiederholen');
+    expect(screen.queryByTestId('falling')).toBeNull();
+    tap('Takt 1');
+    tap('Takt 2');
+    expect(screen.getByTestId('falling')).toBeTruthy();
+    expect(screen.getByText('Schleife: Takt 1 bis 2')).toBeTruthy();
+  });
+
+  it('can be left while picking a loop', () => {
+    startPractice();
+    tap('Takte wiederholen');
+    tap('Takte wiederholen');
+    expect(screen.queryByText(/ersten Takt/)).toBeNull();
+    tap('Takt 2');
+    expect(vi.mocked(audioClock.play)).toHaveBeenCalled();
+  });
+
+  it('counts a bar in before it plays', () => {
+    startPractice();
+    tap('Vorzähler');
+    tap('Abspielen');
+    expect(vi.mocked(audioClock.click).mock.calls[0]).toEqual([0, true]);
+    expect(vi.mocked(audioClock.play)).not.toHaveBeenCalled();
   });
 
   it('asks before deleting a piece', () => {
