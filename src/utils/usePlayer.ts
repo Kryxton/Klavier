@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Hand, Piece } from '../types';
 import { audioClock, unlockAudio } from './audio';
+import { harmonies, harmonyBeat, withPedal } from './pedal';
 import { Player, type Loop } from './player';
 import { soundsBetween, timeline } from './score';
 
@@ -10,20 +11,26 @@ const TIMER_MS = 40;
 
 // Everything the Üben page needs from the player. `active` = what sounds right now; it changes
 // only when a note starts or ends, the position is read directly from `player` for drawing. Whoever
-// draws from the position itself sets `followNotes` to false and saves all those redraws.
-export function usePlayer(piece: Piece, hands: HandChoice, speed: number, loop: Loop | null, followNotes = true) {
+// draws from the position itself sets `followNotes` to false and saves all those redraws. The
+// pedal changes only what is heard: the notes stay as written for everything that shows them.
+export function usePlayer(piece: Piece, { hands, speed, loop, pedal, followNotes }: {
+  hands: HandChoice; speed: number; loop: Loop | null; pedal: boolean; followNotes: boolean;
+}) {
   const player = useRef<Player | null>(null);
   player.current ??= new Player(audioClock);
   const current = player.current;
+  const { beats, beatValue } = piece;
 
   const sounds = useMemo(() => timeline(piece), [piece]);
   const played = useMemo(() => sounds.filter(s => hands === 'both' || s.hand === hands), [sounds, hands]);
+  const harmony = useMemo(() => (pedal ? harmonies(sounds, harmonyBeat({ beats, beatValue })) : null), [pedal, sounds, beats, beatValue]);
+  const heard = useMemo(() => (harmony ? withPedal(played, harmony) : played), [harmony, played]);
   const [running, setRunning] = useState(false);
   const [active, setActive] = useState<{ keys: Set<number>; events: Set<string> }>({ keys: new Set(), events: new Set() });
 
   useEffect(() => {
-    current.load(played, piece.bpm);
-  }, [current, played, piece.bpm]);
+    current.load(heard, piece.bpm);
+  }, [current, heard, piece.bpm]);
   useEffect(() => current.setSpeed(speed), [current, speed]);
   useEffect(() => current.setLoop(loop), [current, loop]);
   useEffect(() => () => current.stop(), [current]);

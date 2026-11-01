@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { Hand, Piece } from './types';
+import { audioClock } from './utils/audio';
 import { barCount } from './utils/score';
 import { loadLibrary } from './utils/storage';
 
@@ -22,6 +23,7 @@ vi.mock('./components/Sheet', () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  vi.mocked(audioClock.play).mockClear();
   Element.prototype.scrollTo = vi.fn(); // the keyboard scrolls to a selected note, jsdom can't
 });
 afterEach(cleanup);
@@ -185,6 +187,21 @@ describe('App', () => {
     tap('Note 6');
     tap('Takte');
     expect(screen.getByText(/^Takt 2 –/)).toBeTruthy();
+  });
+
+  it('lets the notes of a chord ring with the pedal', () => {
+    startPiece();
+    tap('Sofort');
+    for (const key of ['C4', 'E4', 'G4', 'C5']) tap(key);
+    tap('Üben');
+    tap('Abspielen');
+    const written = vi.mocked(audioClock.play).mock.calls[0][2];
+    tap('Anhalten');
+    tap('Zum Anfang');
+    vi.mocked(audioClock.play).mockClear();
+    tap('Pedal');
+    tap('Abspielen');
+    expect(vi.mocked(audioClock.play).mock.calls[0][2]).toBeCloseTo(written * 4);
   });
 
   it('asks before deleting a piece', () => {

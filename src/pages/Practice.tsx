@@ -23,6 +23,7 @@ export function Practice({ piece }: { piece: Piece }) {
   const [view, setView] = useState<View>('sheet');
   const [hands, setHands] = useState<HandChoice>('both');
   const [speed, setSpeed] = useState(100);
+  const [pedal, setPedal] = useState(false);
   const [looping, setLooping] = useState(false);
   const [from, setFrom] = useState(1);
   const [to, setTo] = useState(4);
@@ -37,7 +38,7 @@ export function Practice({ piece }: { piece: Piece }) {
     [looping, first, last, ticks],
   );
 
-  const { player, sounds, running, active, toggle } = usePlayer(piece, hands, speed / 100, loop, view === 'sheet');
+  const { player, sounds, running, active, toggle } = usePlayer(piece, { hands, speed: speed / 100, loop, pedal, followNotes: view === 'sheet' });
 
   // The bar number only needs to follow roughly
   useEffect(() => {
@@ -89,6 +90,7 @@ export function Practice({ piece }: { piece: Piece }) {
           </label>
           <div className="flex w-full items-center gap-2 lg:w-auto">
             <Choice items={HANDS} value={hands} onChange={setHands} className="flex-1 min-w-0 lg:w-56 lg:flex-none" />
+            <Toggle on={pedal} onClick={() => setPedal(!pedal)} className="shrink-0 px-3">Pedal</Toggle>
             <Toggle on={looping} label="Takte wiederholen" onClick={() => setLooping(!looping)} className="w-9 shrink-0 px-0">
               <Repeat className="h-4 w-4" />
             </Toggle>
