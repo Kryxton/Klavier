@@ -7,6 +7,7 @@ import { cn } from '../utils/cn';
 import { barTicks, handTicks } from '../utils/score';
 import { VideoError, readVideo } from '../video/readVideo';
 import { writeDown } from '../video/rhythm';
+import type { Hearing } from '../video/sound';
 import type { Detected } from '../video/tracker';
 
 type Fields = Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>;
@@ -22,7 +23,7 @@ const titleFrom = (file: File) => {
 export function Import({ first, onCreate, onCancel }: { first?: File | null; onCreate: (title: string, fields: Fields) => void; onCancel: () => void }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ notes: Detected[]; fullKeyboard: boolean } | null>(null);
+  const [result, setResult] = useState<{ notes: Detected[]; hearing: Hearing | null; fullKeyboard: boolean } | null>(null);
   const [title, setTitle] = useState('');
   const [octave, setOctave] = useState(0);
   const [tempoFactor, setTempoFactor] = useState(1);
@@ -87,6 +88,16 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
             </div>
           ))}
         </dl>
+
+        <p className="mt-3 text-sm text-dim">
+          {result.hearing
+            ? `Mit dem Ton des Videos geprüft: ${[
+                `${result.hearing.added} ergänzt`,
+                `${result.hearing.moved} korrigiert`,
+                `${result.hearing.dropped} entfernt`,
+              ].join(', ')}.`
+            : 'Nur aus dem Bild gelesen: Den Ton des Videos konnte ich nicht mit den Noten vergleichen.'}
+        </p>
 
         {!reading.sure && (
           <p className="mt-3 rounded-2xl bg-accent-soft p-3 text-sm text-text">

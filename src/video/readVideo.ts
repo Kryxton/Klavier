@@ -1,4 +1,5 @@
 import { findKeyboard, type KeyMap } from './keyboard';
+import { judge, soundOf } from './sound';
 import { Tracker, type Detected } from './tracker';
 
 const MAX_WIDTH = 960; // enough to tell the keys apart, and much faster than full size
@@ -6,6 +7,9 @@ const LOOKS = 12; // pictures tried to find the keyboard: intros and outros ofte
 const CERTAIN = 4; // looks at the full keyboard that are enough
 const SCOUT_SPEEDS = [8, 2]; // runs through, only looking for the keyboard: fast, then carefully
 const SPEED = 1; // faster skips pictures: note starts get less exact and fast tempos are misread
+const SLOWEST = 0.5;
+const ENOUGH = 20; // pictures for each second of video
+const CHECK_EVERY = 2; // seconds of video
 const STEP = 1 / 30; // seconds between pictures when reading one by one
 const HOLE = 0.12; // a longer time without a picture has to be read again; recordings are uneven
 const HOLE_BUDGET = 0.1; // of the video's length: reading holes one by one is slow
@@ -13,7 +17,8 @@ const SEEK_WAIT = 1000; // ms
 const WATCH_MS = 250;
 const STALL_MS = 3000;
 const SCOUT_SHARE = 0.1; // of the progress bar
-const PLAY_SHARE = 0.75;
+const PLAY_SHARE = 0.7;
+const HOLE_SHARE = 0.05;
 
 export class VideoError extends Error {}
 
@@ -76,14 +81,16 @@ function close(video: HTMLVideoElement) {
   video.remove();
 }
 
-function canvasFor(video: HTMLVideoElement) {
+// `rows`: a thin strip that stays on the graphics card. The hint for frequent reading would make
+// every picture come down from there whole, which alone cost 30 ms for each row.
+function canvasFor(video: HTMLVideoElement, rows?: number) {
   const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(video.videoWidth * scale);
-  canvas.height = Math.round(video.videoHeight * scale);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  canvas.height = rows ?? Math.round(video.videoHeight * scale);
+  const ctx = canvas.getContext('2d', { willReadFrequently: !rows });
   if (!ctx) throw new VideoError('Dieser Browser kann das Video nicht lesen.');
-  return { canvas, ctx };
+  return { canvas, ctx, scale };
 }
 
 // A quick run through the video, looking at a few pictures for the keyboard
@@ -129,20 +136,29 @@ export async function readVideo(file: File, progress: (share: number) => void) {
 
   const video = await open(file);
   try {
-    const { canvas, ctx } = canvasFor(video);
+    // Only the two rows needed, so that as many pictures as possible get read: a bar shorter than
+    // the time between two pictures is never seen
+    const { canvas, ctx, scale } = canvasFor(video, 2);
     const tracker = new Tracker(map);
     const read = (time: number) => {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      tracker.add(
-        ctx.getImageData(0, map.scanY, canvas.width, 1), time,
-        ctx.getImageData(0, map.keyRow, canvas.width, 1),
-      );
+      [map.scanY, map.keyRow].forEach((y, row) => {
+        ctx.drawImage(video, 0, y / scale, video.videoWidth, 1 / scale, 0, row, canvas.width, 1);
+      });
+      const { data, width } = ctx.getImageData(0, 0, canvas.width, 2);
+      const row = (y: number) => ({ data: data.subarray(y * width * 4, (y + 1) * width * 4), width, height: 1 });
+      tracker.add(row(0), time, row(1));
     };
 
     const seen = [0];
+    let since = 1;
     await playThrough(video, SPEED, time => {
       read(time);
       seen.push(time);
+      if (time - seen[since] >= CHECK_EVERY) {
+        // A slow device gets more pictures out of a video played more slowly
+        if ((seen.length - since) / (time - seen[since]) < ENOUGH) video.playbackRate = Math.max(SLOWEST, video.playbackRate * 0.75);
+        since = seen.length - 1;
+      }
       progress(SCOUT_SHARE + PLAY_SHARE * Math.min(1, time / (video.duration || 1)));
     });
 
@@ -158,12 +174,18 @@ export async function readVideo(file: File, progress: (share: number) => void) {
         if (performance.now() > until || !(await seek(video, time))) break reading;
         read(time);
         done += STEP;
-        progress(SCOUT_SHARE + PLAY_SHARE + (1 - SCOUT_SHARE - PLAY_SHARE) * Math.min(1, done / missing));
+        progress(SCOUT_SHARE + PLAY_SHARE + HOLE_SHARE * Math.min(1, done / missing));
       }
     }
     const notes: Detected[] = tracker.finish();
     if (!notes.length) throw new VideoError('Die Klaviatur ist da, aber ich habe keine Balken darüber erkannt.');
-    return { notes, fullKeyboard: map.fullKeyboard };
+
+    // The sound is the second opinion; without one the picture stands alone
+    const soundFrom = SCOUT_SHARE + PLAY_SHARE + HOLE_SHARE;
+    progress(soundFrom);
+    const samples = await soundOf(file);
+    const checked = samples && await judge(notes, tracker.doubtful, samples, share => progress(soundFrom + (1 - soundFrom) * share));
+    return { notes: checked?.notes ?? notes, hearing: checked?.hearing ?? null, fullKeyboard: map.fullKeyboard };
   } finally {
     close(video);
   }

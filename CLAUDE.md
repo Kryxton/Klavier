@@ -52,8 +52,12 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     landing notes flash and glow.
   - `tracker.ts`: follows whole bars through the row, the key comes from the bar's middle (exact
     to a pixel or two; widths change with glow). Background = most frequent colour per pixel.
+    Two looks: the first learns how bright a solid bar is here, the second takes only pixels with
+    `SOLID` of that, because sparks between two bars joined them into one wrong note somewhere
+    between their keys (that was the "comically wrong" sound: 21 notes out of key, now 3).
     Dropped: faint things (dust, compared with long bars nearby), colourless things (the player's
     pause symbol, text), pieces inside a long bar, pictures without a keyboard (transitions, ads).
+    What the first look saw and the second didn't goes to `doubtful`, for the sound to judge.
     Limits in seconds, not frames: browsers deliver other frame rates than a 30 fps test.
     Hands by hue only (two shades per hand are common), one colour = split at middle C.
   - `rhythm.ts`: `follow` for machine-made tutorials (notes within `EXACT`). Otherwise played music:
@@ -61,10 +65,24 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     sixteenths to each beat, so no bars of 5 + 5 sixteenths), rolled chords are grouped, short
     chords held to the next. One voice per hand, always 4/4. The tempo may drift: Cinnamon Girl
     goes from 1.0 s to about 0.9 s per beat, so 64 BPM and 41 bars are right for it.
+  - `sound.ts`: **the picture proposes, the sound decides.** `soundOf` decodes the file's sound
+    (no sound or unreadable = null, then the picture stands alone). `judge` finds the delay between
+    bar and sound (0.36 s here), learns what each key sounds like from where the picture says it is
+    played, splits the sound into keys (non-negative factorisation, sparse templates, about 10 s on
+    a PC) and then: adds doubtful bars that clearly sound, moves silent notes to the neighbour key
+    that sounds, drops silent flickers. Only keys with a learned sound count (bass rumble looks
+    like rarely used keys). Solid bars it can't hear stay: quiet inner notes can't be heard out.
+    Blind test on the real recording: 62 % of notes made wrong repaired or removed, 81 % of hidden
+    notes found again, about 1 % of right notes changed; none of the 59 added notes is out of key,
+    of the doubtful ones 39 % are. So it is deliberately careful: it won't find every error.
   - `readVideo.ts`: a fast run for the keyboard (8×, then 2× if that found nothing), then a fresh
-    video element at speed 1. **No seeking in the main path:** Chrome on Windows stops answering
-    after the first seek in iPhone recordings (HEVC). Holes are only an extra, with a time budget;
-    recordings have uneven frames, so small gaps are no holes.
+    video element at speed 1, slower if fewer than `ENOUGH` pictures a second arrive. **No seeking
+    in the main path:** Chrome on Windows stops answering after the first seek in iPhone recordings
+    (HEVC). Holes are only an extra, with a time budget; recordings have uneven frames, so small
+    gaps are no holes. **Canvas readback decides how many pictures arrive:** `willReadFrequently`
+    made each picture come down from the graphics card whole (30 ms a row, 11 pictures a second,
+    every bar under 0.1 s lost: the old gap of 700 against 850 notes). Without it and reading only
+    the two rows: 27 a second, 860 notes, and two runs agree on 849 of them.
 - `utils/storage.ts`: everything in localStorage `klavier_pieces`, saved on every change, opened
   again on start. Failure shows a banner.
 - `components/ui.tsx`: shared pieces, use them. Colors only through the tokens in `index.css`.
@@ -87,17 +105,20 @@ Long heredocs in the Bash tool break: write scripts to the scratchpad.
 ffmpeg-static`), `scripts/video-check.mjs` uploads it through the page and compares note by note.
 `scripts/recording-check.mjs` runs a real recording through the page with screenshots at all sizes.
 `scripts/row-strip.mjs` stacks one pixel row of every frame into a picture: the best way to see
-what the reading sees. Real recordings found everything generated ones didn't, always try one.
+what the reading sees. Compare with the sound (ffmpeg extracts it): notes out of key that the sound
+denies pointed straight at the sparks. Stop the dev server before `npm test`: running both breaks
+vitest with "Cannot read properties of undefined (reading 'config')". Real recordings found everything generated ones didn't, always try one.
 Don't record test videos with MediaRecorder: the file had a 13 s hole that looked like a bug.
 The user's recording (Cinnamon Girl, portrait, HEVC, one bar colour, hands, smoke) lies in the
 project folder; video files are gitignored and must stay out of this public repo.
 
 ## Open
-- **Accuracy on real videos is unproven:** no original to compare with. For the Cinnamon Girl
-  recording the browser finds about 700 notes, the same code on ffmpeg frames about 850; the
-  reason is unknown (the first bars agree). Results also vary a little from run to run. Needs the
-  user's ear, then more recordings.
-- Not tried in Safari on iPhone/iPad at all. Reading takes about the length of the video.
+- **Pitch is now checked by the sound, rhythm is still an estimate.** For played music the note
+  lengths and some starts are guesses: `H3:3 H3:1` patterns around the beat, chords falling apart,
+  the bar line can land two beats off from run to run. The sound isn't used for timing yet (its
+  long look is too blurred for that). Needs the user's ear, then more recordings.
+- Not tried in Safari on iPhone/iPad at all: neither the frame rate nor `decodeAudioData` on these
+  files. Reading takes about the length of the video, plus 10 to 30 s for the sound.
 - Cloud sync (same Supabase project, own table, SQL file the user runs).
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
   A YouTube link was discussed and declined: reading the running tab works only on the PC, a
