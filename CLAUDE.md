@@ -57,8 +57,10 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     Limits in seconds, not frames: browsers deliver other frame rates than a 30 fps test.
     Hands by hue only (two shades per hand are common), one colour = split at middle C.
   - `rhythm.ts`: `follow` for machine-made tutorials (notes within `EXACT`). Otherwise played music:
-    `findPulse` (autocorrelation), `countAlong` (a grid that notes only nudge), rolled chords are
-    grouped, short chords held to the next. One voice per hand, always 4/4.
+    `findPulse` (autocorrelation), `trackBeats` (best chain of beats through the whole piece, four
+    sixteenths to each beat, so no bars of 5 + 5 sixteenths), rolled chords are grouped, short
+    chords held to the next. One voice per hand, always 4/4. The tempo may drift: Cinnamon Girl
+    goes from 1.0 s to about 0.9 s per beat, so 64 BPM and 41 bars are right for it.
   - `readVideo.ts`: a fast run for the keyboard (8×, then 2× if that found nothing), then a fresh
     video element at speed 1. **No seeking in the main path:** Chrome on Windows stops answering
     after the first seek in iPhone recordings (HEVC). Holes are only an extra, with a time budget;
@@ -92,8 +94,9 @@ project folder; video files are gitignored and must stay out of this public repo
 
 ## Open
 - **Accuracy on real videos is unproven:** no original to compare with. For the Cinnamon Girl
-  recording the browser finds about 690 notes, the same code on ffmpeg frames about 850; the
-  reason is unknown (the first bars agree). Needs the user's ear, then more recordings.
+  recording the browser finds about 700 notes, the same code on ffmpeg frames about 850; the
+  reason is unknown (the first bars agree). Results also vary a little from run to run. Needs the
+  user's ear, then more recordings.
 - Not tried in Safari on iPhone/iPad at all. Reading takes about the length of the video.
 - Cloud sync (same Supabase project, own table, SQL file the user runs).
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).

@@ -11,7 +11,8 @@ const EXACT = 0.02; // seconds: machine-made tutorials hit the beat this closely
 const FOLLOW = 0.08; // how fast the counted tempo follows the music
 const DRIFT = 0.15; // how far it may wander
 const CHORD = 0.06; // seconds; notes this close were meant together
-const NUDGE = 0.2; // how far one played note moves the grid
+const BIN = 0.01; // seconds, for following played music
+const BEAT_STIFFNESS = 30; // how strongly beats keep to the pulse
 const PULSE_MIN = 0.3; // seconds between beats
 const PULSE_MAX = 2;
 
@@ -46,51 +47,76 @@ function follow(onsets: number[], bpm: number) {
   return { steps, tempo, error: error / notes, off: off / notes, missed: missed / notes };
 }
 
-// For played music, where chords are rolled and notes come early or late: the grid keeps its own
-// course, each note only nudges it. Notes of a rolled chord land on the same step.
-function countAlong(onsets: number[], bpm: number) {
-  const base = 60 / bpm / 4;
-  let step = base;
-  let grid = onsets[0];
-  let index = 0;
-  const steps = [0];
-  for (const time of onsets.slice(1)) {
-    const count = Math.max(0, Math.round((time - grid) / step));
-    const miss = time - grid - count * step;
-    index += count;
-    steps.push(index);
-    grid += count * step + NUDGE * miss;
-    step = Math.min(base * (1 + DRIFT), Math.max(base * (1 - DRIFT), step + (0.02 * miss) / Math.max(1, count)));
-  }
-  return steps;
-}
-
-// The pulse of played music: the distance at which note starts keep coming back. Chords weigh more
-// than single notes, they mostly fall on the beat.
-function findPulse(onsets: number[], weights: number[]) {
-  const bin = 0.01;
-  const length = Math.ceil((onsets[onsets.length - 1] - onsets[0]) / bin) + 1;
-  const signal = new Float64Array(length);
+// Note starts as a curve over time, chords weighing more than single notes
+function startCurve(onsets: number[], weights: number[]) {
+  const length = Math.ceil((onsets[onsets.length - 1] - onsets[0]) / BIN) + 1;
+  const curve = new Float64Array(length);
   onsets.forEach((time, i) => {
-    const at = Math.round((time - onsets[0]) / bin);
-    for (let d = -4; d <= 4; d++) {
-      if (at + d >= 0 && at + d < length) signal[at + d] += weights[i] * Math.exp(-(d * d) / 8);
+    const at = Math.round((time - onsets[0]) / BIN);
+    for (let d = -6; d <= 6; d++) {
+      if (at + d >= 0 && at + d < length) curve[at + d] += weights[i] * Math.exp(-(d * d) / 18);
     }
   });
+  return curve;
+}
+
+// The pulse of played music: the distance at which note starts keep coming back
+function findPulse(curve: Float64Array) {
   let best = 1;
   let bestScore = -1;
-  for (let lag = Math.round(PULSE_MIN / bin); lag <= Math.round(PULSE_MAX / bin); lag++) {
+  for (let lag = Math.round(PULSE_MIN / BIN); lag <= Math.round(PULSE_MAX / BIN); lag++) {
     let sum = 0;
-    for (let i = 0; i + lag < length; i++) sum += signal[i] * signal[i + lag];
-    if (sum > bestScore) {
-      bestScore = sum;
+    for (let i = 0; i + lag < curve.length; i++) sum += curve[i] * curve[i + lag];
+    const score = sum / (curve.length - lag);
+    if (score > bestScore) {
+      bestScore = score;
       best = lag;
     }
   }
-  let bpm = 60 / (best * bin);
+  let bpm = 60 / (best * BIN);
   while (bpm > 130) bpm /= 2;
   while (bpm < 50) bpm *= 2;
   return bpm;
+}
+
+// The best chain of beats through the whole piece: each beat wants to sit on note starts and about
+// one pulse after the one before. Seen as a whole, one early chord can't throw the count off, which
+// counting note by note can't avoid.
+function trackBeats(curve: Float64Array, bpm: number) {
+  const period = 60 / bpm / BIN;
+  const mean = curve.reduce((sum, value) => sum + value, 0) / curve.length || 1;
+  const score = new Float64Array(curve.length);
+  const previous = new Int32Array(curve.length).fill(-1);
+  for (let t = 0; t < curve.length; t++) {
+    let best = 0;
+    for (let p = Math.max(0, t - Math.round(period * 1.4)); p <= t - Math.round(period * 0.7); p++) {
+      const stretch = Math.log((t - p) / period);
+      const value = score[p] - BEAT_STIFFNESS * mean * stretch * stretch;
+      if (value > best) {
+        best = value;
+        previous[t] = p;
+      }
+    }
+    score[t] = curve[t] / mean + best;
+  }
+  let at = score.length - 1;
+  for (let t = Math.max(0, score.length - Math.round(period)); t < score.length; t++) if (score[t] > score[at]) at = t;
+  const beats: number[] = [];
+  for (; at >= 0; at = previous[at]) beats.unshift(at * BIN);
+  return beats;
+}
+
+// Each note start as a step of sixteenths: four to every beat, whatever a beat really took
+function stepsAlong(onsets: number[], beats: number[], period: number) {
+  const first = onsets[0];
+  return onsets.map(time => {
+    const at = time - first;
+    let beat = beats.findIndex((_, i) => at < (beats[i + 1] ?? Infinity));
+    if (beat < 0) beat = 0;
+    const from = beats[beat] ?? 0;
+    const span = (beats[beat + 1] ?? from + period) - from;
+    return Math.max(0, beat * 4 + Math.round((4 * (at - from)) / span));
+  });
 }
 
 // Many tempos fit mathematically; the right one writes the notes as plain values. Even spacing at
@@ -198,13 +224,17 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
   const together = (span: number) => times.filter((t, i) => i === 0 || t - times[i - 1] > span);
   const exact = together(CHORD);
   const steady = findTempo(exact);
-  const weights = exact.map((t, i) => notes.filter(n => n.start >= t && n.start < (exact[i + 1] ?? Infinity)).length);
-  const pulse = steady.sure || exact.length < 8 ? null : findPulse(exact, weights);
+  const curve = steady.sure || exact.length < 8 ? null : startCurve(
+    exact, exact.map((t, i) => notes.filter(n => n.start >= t && n.start < (exact[i + 1] ?? Infinity)).length),
+  );
+  const pulse = curve ? findPulse(curve) : null;
   // Played chords are often rolled: what is closer than half a sixteenth belongs together
   const onsets = pulse ? together((0.45 * 15) / pulse) : exact;
-  const tempo = pulse ? { ...steady, bpm: pulse } : steady;
+  const beatTimes = curve && pulse ? trackBeats(curve, pulse) : [];
+  const counted = beatTimes.length > 1 ? (60 * (beatTimes.length - 1)) / (beatTimes[beatTimes.length - 1] - beatTimes[0]) : pulse;
+  const tempo = counted ? { ...steady, bpm: counted } : steady;
   const bpm = tempo.bpm * tempoFactor;
-  const anchors = !onsets.length ? [] : pulse ? countAlong(onsets, pulse) : follow(onsets, steady.start).steps;
+  const anchors = !onsets.length ? [] : pulse ? stepsAlong(onsets, beatTimes, 60 / tempo.bpm) : follow(onsets, steady.start).steps;
   const scale = tempoFactor; // half the tempo: every note takes half as many steps
 
   // Seconds to ticks along the followed beat, between the note starts
