@@ -2,60 +2,79 @@ import * as Tone from 'tone';
 import type { Clock } from './player';
 import type { Sound } from './score';
 
+const RELEASE = 1; // seconds a key fades after it is let go
+const CUT = 0.06; // seconds everything fades when playback is stopped
+
 // Until the real piano samples have arrived (or if they can't be loaded) a small synth plays, so a
 // tap always makes a sound
-let sampler: Tone.Sampler | null = null;
-let samplerReady = false;
+let samples: Tone.ToneAudioBuffers | null = null;
+let samplesReady = false;
 let synth: Tone.PolySynth | null = null;
+const recorded: number[] = []; // the keys that have a sample, the others are pitched from the nearest
 
-function loadSampler() {
-  if (sampler) return;
-  const urls: Record<string, string> = { A0: 'A0.mp3', C8: 'C8.mp3' };
+// All notes of one run go through one bus. Tone's Sampler can't take back a release it was given,
+// so a pause would leave held notes sounding; dropping the bus also reaches those that were only
+// planned so far.
+let bus: Tone.Gain | null = null;
+const output = () => (bus ??= new Tone.Gain(1).toDestination());
+
+function loadSamples() {
+  if (samples) return;
+  const urls: Record<number, string> = { 21: 'A0.mp3', 108: 'C8.mp3' };
   for (let octave = 1; octave <= 7; octave++) {
-    urls[`C${octave}`] = `C${octave}.mp3`;
-    urls[`D#${octave}`] = `Ds${octave}.mp3`;
-    urls[`F#${octave}`] = `Fs${octave}.mp3`;
-    urls[`A${octave}`] = `A${octave}.mp3`;
+    const c = (octave + 1) * 12;
+    urls[c] = `C${octave}.mp3`;
+    urls[c + 3] = `Ds${octave}.mp3`;
+    urls[c + 6] = `Fs${octave}.mp3`;
+    urls[c + 9] = `A${octave}.mp3`;
   }
-  sampler = new Tone.Sampler({
+  recorded.push(...Object.keys(urls).map(Number));
+  samples = new Tone.ToneAudioBuffers({
     urls,
-    release: 1,
     baseUrl: 'https://tonejs.github.io/audio/salamander/',
-    onload: () => { samplerReady = true; },
-    onerror: () => { samplerReady = false; },
-  }).toDestination();
+    onload: () => { samplesReady = true; },
+    onerror: () => { samplesReady = false; },
+  });
 }
 
-function instrument() {
-  if (sampler && samplerReady) return sampler;
-  synth ??= new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: 'triangle' },
-    envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.6 },
-    volume: -8,
-  }).toDestination();
-  return synth;
+function strike(midi: number, when: number, seconds: number) {
+  if (!samples || !samplesReady) {
+    synth ??= new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.6 },
+      volume: -8,
+    }).toDestination();
+    synth.triggerAttackRelease(Tone.Frequency(midi, 'midi').toNote(), seconds, when);
+    return;
+  }
+  const nearest = recorded.reduce((best, key) => (Math.abs(key - midi) < Math.abs(best - midi) ? key : best));
+  const buffer = samples.get(nearest);
+  const playbackRate = Tone.intervalToFrequencyRatio(midi - nearest);
+  const source = new Tone.ToneBufferSource({ url: buffer, curve: 'exponential', fadeOut: RELEASE, playbackRate }).connect(output());
+  source.onended = () => {}; // with a listener Tone cleans the source up by itself
+  source.start(when, 0, buffer.duration / playbackRate, 1);
+  source.stop(when + seconds);
 }
 
 // Browsers allow sound only after a tap: call this from the tap itself
 export function unlockAudio() {
   void Tone.start();
-  loadSampler();
+  loadSamples();
 }
-
-const noteName = (midi: number) => Tone.Frequency(midi, 'midi').toNote();
 
 export function playKey(midi: number) {
   unlockAudio();
-  instrument().triggerAttackRelease(noteName(midi), 0.6, Tone.immediate());
+  strike(midi, Tone.immediate(), 0.6);
 }
 
 export const audioClock: Clock = {
   now: () => Tone.immediate(),
-  play: (sound: Sound, when: number, seconds: number) => {
-    instrument().triggerAttackRelease(noteName(sound.midi), seconds, when);
-  },
+  play: (sound: Sound, when: number, seconds: number) => strike(sound.midi, when, seconds),
   silence: () => {
-    sampler?.releaseAll();
     synth?.releaseAll();
+    const old = bus;
+    bus = null;
+    old?.gain.rampTo(0, CUT);
+    if (old) setTimeout(() => old.dispose(), CUT * 2000);
   },
 };
