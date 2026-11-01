@@ -26,3 +26,6 @@ Thumbs.db
 *.MOV
 *.webm
 *.m4v
+
+# Measurements from those recordings, for scripts/messlatte.mjs
+.messung/
