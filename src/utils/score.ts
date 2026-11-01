@@ -23,6 +23,14 @@ export function splitTicks(ticks: number) {
   return parts;
 }
 
+// What an event becomes when it is cut in two: two halves, a dotted one its note and its dot.
+// Null for the shortest values, nothing shorter can be written.
+export function halves({ dur, dotted }: Pick<Ev, 'dur' | 'dotted'>) {
+  const half = LONGEST_FIRST[LONGEST_FIRST.indexOf(dur) + 1];
+  if (!half) return null;
+  return [{ dur: dotted ? dur : half }, { dur: half }];
+}
+
 // One printed note. An event that crosses a barline is printed as several, tied together.
 export interface Printed {
   ev: Ev;
@@ -113,15 +121,14 @@ export function timeline(piece: Piece): Sound[] {
   return sounds.sort((a, b) => a.start - b.start || a.midi - b.midi);
 }
 
-// The events a bar starts with or contains, as copies with new ids, to append it again
-export function eventsOfBar(events: Ev[], bar: number, ticksPerBar: number, newId: () => string) {
+// The first event that starts in a bar or behind it
+export function eventAtBar(events: Ev[], bar: number, ticksPerBar: number) {
   let tick = 0;
-  const out: Ev[] = [];
   for (const ev of events) {
-    if (Math.floor(tick / ticksPerBar) === bar) out.push({ ...ev, id: newId(), keys: [...ev.keys] });
+    if (tick >= bar * ticksPerBar) return ev;
     tick += eventTicks(ev);
   }
-  return out;
+  return null;
 }
 
 export function barOfEvent(events: Ev[], id: string, ticksPerBar: number) {

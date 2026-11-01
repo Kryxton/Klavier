@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Duration, Ev, Piece } from '../types';
-import { barCount, barOfEvent, eventsOfBar, eventTicks, splitTicks, soundsBetween, timeline, toBars } from './score';
+import { barCount, barOfEvent, eventAtBar, eventTicks, halves, soundsBetween, splitTicks, timeline, toBars } from './score';
 
 let next = 0;
 const ev = (dur: Duration, keys: number[] = [60], extra: Partial<Ev> = {}): Ev => ({ id: `e${next++}`, keys, dur, ...extra });
@@ -77,13 +77,17 @@ describe('bars of a piece', () => {
     expect(barCount(piece([]))).toBe(0);
   });
 
-  it('copies a bar with new ids', () => {
+  it('finds bars and events', () => {
     const events = [ev('w', [60]), ev('h', [62]), ev('h', [64])];
-    let n = 0;
-    const copy = eventsOfBar(events, 1, 192, () => `new${n++}`);
-    expect(copy.map(e => e.keys[0])).toEqual([62, 64]);
-    expect(copy[0].id).toBe('new0');
     expect(barOfEvent(events, events[2].id, 192)).toBe(1);
+    expect(eventAtBar(events, 1, 192)).toBe(events[1]);
+    expect(eventAtBar(events, 2, 192)).toBeNull();
+  });
+
+  it('cuts a value in two', () => {
+    expect(halves({ dur: 'q' })).toEqual([{ dur: '8' }, { dur: '8' }]);
+    expect(halves({ dur: 'q', dotted: true })).toEqual([{ dur: 'q' }, { dur: '8' }]);
+    expect(halves({ dur: '32' })).toBeNull();
   });
 
   it('knows dotted lengths', () => {
