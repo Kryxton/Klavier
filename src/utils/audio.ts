@@ -4,12 +4,15 @@ import type { Sound } from './score';
 
 const RELEASE = 1; // seconds a key fades after it is let go
 const CUT = 0.06; // seconds everything fades when playback is stopped
+const CLICK_PITCH = { strong: 1760, weak: 1320 };
+const CLICK_LEVEL = 0.3; // about as loud as a played note
 
 // Until the real piano samples have arrived (or if they can't be loaded) a small synth plays, so a
 // tap always makes a sound
 let samples: Tone.ToneAudioBuffers | null = null;
 let samplesReady = false;
 let synth: Tone.PolySynth | null = null;
+let clicks: { strong: Tone.ToneAudioBuffer; weak: Tone.ToneAudioBuffer } | null = null;
 const recorded: number[] = []; // the keys that have a sample, the others are pitched from the nearest
 
 // All notes of one run go through one bus. Tone's Sampler can't take back a release it was given,
@@ -56,6 +59,22 @@ function strike(midi: number, when: number, seconds: number) {
   source.stop(when + seconds);
 }
 
+// A wooden tick for the count-in, made once
+function clickSound(pitch: number) {
+  const rate = Tone.getContext().sampleRate;
+  return Tone.ToneAudioBuffer.fromArray(Float32Array.from({ length: rate * 0.05 }, (_, i) => (
+    Math.sin((2 * Math.PI * pitch * i) / rate) * Math.exp(-i / (rate * 0.008))
+  )));
+}
+
+function click(when: number, strong: boolean) {
+  clicks ??= { strong: clickSound(CLICK_PITCH.strong), weak: clickSound(CLICK_PITCH.weak) };
+  const buffer = strong ? clicks.strong : clicks.weak;
+  const source = new Tone.ToneBufferSource({ url: buffer }).connect(output());
+  source.onended = () => {};
+  source.start(when, 0, buffer.duration, CLICK_LEVEL);
+}
+
 // Browsers allow sound only after a tap: call this from the tap itself
 export function unlockAudio() {
   void Tone.start();
@@ -70,6 +89,7 @@ export function playKey(midi: number) {
 export const audioClock: Clock = {
   now: () => Tone.immediate(),
   play: (sound: Sound, when: number, seconds: number) => strike(sound.midi, when, seconds),
+  click,
   silence: () => {
     synth?.releaseAll();
     const old = bus;

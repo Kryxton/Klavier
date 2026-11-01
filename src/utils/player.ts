@@ -3,12 +3,19 @@ import { PPQ, type Sound } from './score';
 export interface Clock {
   now: () => number; // seconds on the audio clock
   play: (sound: Sound, when: number, seconds: number) => void;
+  click: (when: number, strong: boolean) => void;
   silence: () => void;
 }
 
 export interface Loop {
   from: number; // ticks
   to: number;
+}
+
+// The bar counted before the music starts: this many beats, `ticks` apart
+export interface CountIn {
+  beats: number;
+  ticks: number;
 }
 
 // How far ahead notes are handed to the audio clock. Timers only wake the scheduler up; the notes
@@ -27,6 +34,8 @@ export class Player {
   private startedAt = 0; // audio time of `startTick`
   private startTick = 0;
   private handed = 0; // everything before this tick has been given to the audio clock
+  private clicks: { when: number; strong: boolean }[] = []; // of the count, not yet given to the clock
+  private countedIn = 0; // audio time the count ends
   private clock: Clock;
 
   constructor(clock: Clock) {
@@ -50,7 +59,11 @@ export class Player {
   // Where the music is right now, in ticks
   position() {
     if (!this.running) return this.startTick;
-    const tick = this.startTick + (this.clock.now() - this.startedAt) * this.ticksPerSecond();
+    const now = this.clock.now();
+    if (now < this.countedIn) return this.startTick;
+    const tick = this.startTick + (now - this.startedAt) * this.ticksPerSecond();
+    // The next round of a loop is planned ahead; until it begins, the old one is what sounds
+    if (this.loop && tick < this.startTick) return this.loop.to - (this.startTick - tick);
     if (!this.loop || tick < this.loop.to) return tick;
     return this.loop.from + ((tick - this.loop.from) % (this.loop.to - this.loop.from));
   }
@@ -59,11 +72,24 @@ export class Player {
     this.startedAt = this.clock.now();
     this.startTick = tick;
     this.handed = tick;
+    this.endCount();
   }
 
-  start(tick = this.startTick) {
+  private endCount() {
+    this.clicks = [];
+    this.countedIn = 0;
+  }
+
+  start(tick = this.startTick, countIn?: CountIn) {
+    if (this.running) this.clock.silence();
     this.running = true;
     this.rebase(this.loop && (tick < this.loop.from || tick >= this.loop.to) ? this.loop.from : tick);
+    if (countIn) {
+      const beat = countIn.ticks / this.ticksPerSecond();
+      this.clicks = Array.from({ length: countIn.beats }, (_, i) => ({ when: this.startedAt + i * beat, strong: i === 0 }));
+      this.startedAt += countIn.beats * beat;
+      this.countedIn = this.startedAt;
+    }
     this.tick();
   }
 
@@ -71,6 +97,7 @@ export class Player {
     const at = this.position();
     this.running = false;
     this.startTick = at;
+    this.endCount();
     this.clock.silence();
   }
 
@@ -85,6 +112,7 @@ export class Player {
   setSpeed(speed: number) {
     const at = this.position();
     this.speed = speed;
+    if (this.clock.now() < this.countedIn) return; // the count goes on as it began
     if (this.running) this.rebase(at);
     else this.startTick = at;
   }
@@ -100,8 +128,13 @@ export class Player {
   // Call this every few dozen milliseconds. Returns false once the piece has ended.
   tick() {
     if (!this.running) return false;
+    const now = this.clock.now();
+    while (this.clicks.length && this.clicks[0].when < now + LOOKAHEAD) {
+      const { when, strong } = this.clicks.shift() as { when: number; strong: boolean };
+      this.clock.click(Math.max(when, now), strong);
+    }
     const perSecond = this.ticksPerSecond();
-    const horizon = this.handed + Math.max(0, (this.clock.now() + LOOKAHEAD - this.timeOf(this.handed)) * perSecond);
+    const horizon = this.handed + Math.max(0, (now + LOOKAHEAD - this.timeOf(this.handed)) * perSecond);
 
     if (this.loop && horizon >= this.loop.to) {
       this.handOut(this.handed, this.loop.to);
