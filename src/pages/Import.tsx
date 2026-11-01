@@ -6,13 +6,14 @@ import type { Piece } from '../types';
 import { cn } from '../utils/cn';
 import { barTicks, handTicks } from '../utils/score';
 import { VideoError, readVideo } from '../video/readVideo';
-import { writeDown } from '../video/rhythm';
+import { writeDown, type Meter } from '../video/rhythm';
 import type { Hearing } from '../video/sound';
 import type { Detected } from '../video/tracker';
 
 type Fields = Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>;
 const TEMPOS = [{ id: 0.5, label: 'Halb' }, { id: 1, label: 'Normal' }, { id: 2, label: 'Doppelt' }];
 const OCTAVES = [-2, -1, 0, 1, 2].map(id => ({ id, label: id > 0 ? `+${id}` : String(id) }));
+const METERS: { id: Meter; label: string }[] = [{ id: '4/4', label: '4/4' }, { id: '3/4', label: '3/4' }, { id: '6/8', label: '6/8' }];
 
 // A recording's own file name says nothing about the piece
 const titleFrom = (file: File) => {
@@ -27,15 +28,17 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
   const [title, setTitle] = useState('');
   const [octave, setOctave] = useState(0);
   const [tempoFactor, setTempoFactor] = useState(1);
+  const [meter, setMeter] = useState<Meter | undefined>();
   const input = useRef<HTMLInputElement>(null);
 
-  const reading = useMemo(() => (result ? writeDown(result.notes, { octave, tempoFactor }) : null), [result, octave, tempoFactor]);
+  const reading = useMemo(() => (result ? writeDown(result.notes, { octave, tempoFactor, meter }) : null), [result, octave, tempoFactor, meter]);
 
   const start = async (file?: File | null) => {
     if (!file) return;
     setError('');
     setResult(null);
     setProgress(0);
+    setMeter(undefined);
     setTitle(titleFrom(file));
     try {
       // Whole percents only: redrawing the keys for every picture would slow the reading down
@@ -106,6 +109,10 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
         )}
 
         <div className="mt-5 space-y-4">
+          <div>
+            <p className={LABEL}>Taktart</p>
+            <Choice items={METERS} value={`${reading.piece.beats}/${reading.piece.beatValue}` as Meter} onChange={setMeter} className="mt-1" />
+          </div>
           <div>
             <p className={LABEL}>Tempo</p>
             <Choice items={TEMPOS} value={tempoFactor} onChange={setTempoFactor} className="mt-1" />

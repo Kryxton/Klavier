@@ -17,6 +17,12 @@ const EXACT_STIFFNESS = 300; // and in a machine-made piece, which only changes 
 const TEMPO_WINDOW = 16; // beats over which the tempo is read
 const PULSE_MIN = 0.3; // seconds between beats
 const PULSE_MAX = 2;
+const THREE_BAR = 12; // sixteenths in a bar of 3/4 or 6/8
+const FOUR_BAR = 16;
+const CLEAR_BASS = 4; // times more often than by chance: the bass really marks the bars
+const CLEARER = 1.5; // how much clearer three has to be than four
+const ENOUGH_BARS = 8; // shorter pieces don't show their bars
+const SIX_EIGHT_FROM = 110; // quarters a minute; running eighths this fast feel like two beats, not three
 
 // Follows the music through its note starts the way a musician counts along: each note says where
 // the beat really is, and the tempo drifts with it. A fixed grid can't work on played music, where
@@ -176,6 +182,51 @@ export function findKey(notes: Detected[]) {
   return best;
 }
 
+// The bass marks the bars, in block chords as in broken ones: the lowest note of a stretch one bar
+// long keeps falling on the same place, the one. Which place, and how clearly: 1 is pure chance.
+function bassPlace(lowest: Map<number, number>, last: number, bar: number) {
+  const votes = new Array<number>(bar).fill(0);
+  for (let from = 0; from + bar <= last + 1; from++) {
+    let low = Infinity;
+    let at = -1;
+    for (let step = from; step < from + bar; step++) {
+      const key = lowest.get(step);
+      if (key !== undefined && key < low) {
+        low = key;
+        at = step;
+      }
+    }
+    if (at >= 0) votes[at % bar]++;
+  }
+  const total = votes.reduce((sum, vote) => sum + vote, 0);
+  const place = votes.indexOf(Math.max(...votes));
+  return { place, clearness: total ? (votes[place] * bar) / total : 0 };
+}
+
+export type Meter = '4/4' | '3/4' | '6/8';
+
+const meterOf = (meter: Meter) => {
+  const [beats, beatValue] = meter.split('/').map(Number);
+  return { beats, beatValue, ticksPerBar: (beats * 192) / beatValue };
+};
+
+// The bars of a piece, from where its bass goes
+function findBars(notes: { tick: number; midi: number }[], bpm: number) {
+  const lowest = new Map<number, number>();
+  for (const { tick, midi } of notes) {
+    const step = Math.round(tick / GRID);
+    lowest.set(step, Math.min(midi, lowest.get(step) ?? Infinity));
+  }
+  const last = Math.max(0, ...lowest.keys());
+  const four = bassPlace(lowest, last, FOUR_BAR);
+  const three = bassPlace(lowest, last, THREE_BAR);
+  if (last >= ENOUGH_BARS * THREE_BAR && three.clearness >= CLEAR_BASS && three.clearness >= CLEARER * four.clearness) {
+    return { meter: (bpm >= SIX_EIGHT_FROM ? '6/8' : '3/4') as Meter, place: three.place * GRID };
+  }
+  const clear = last >= ENOUGH_BARS * FOUR_BAR && four.clearness >= CLEAR_BASS;
+  return { meter: '4/4' as Meter, place: clear ? four.place * GRID : null };
+}
+
 // Where bar 1 starts: the place where strong notes come round every bar
 function barPhase(items: { tick: number; hand: Hand; size: number }[], ticksPerBar: number) {
   let best = 0;
@@ -230,7 +281,7 @@ export interface Reading {
 
 // From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
 // import page: an octave for short keyboards, and half or double when the beat was misjudged.
-export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {}): Reading {
+export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter }: { octave?: number; tempoFactor?: number; meter?: Meter } = {}): Reading {
   const times = [...new Set(notes.map(n => n.start))].sort((a, b) => a - b);
   // A chord: every note of it takes the time of its first
   const together = (span: number) => times.filter((t, i) => i === 0 || t - times[i - 1] > span);
@@ -277,9 +328,8 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
     };
   });
 
-  const beats = 4;
-  const beatValue = 4;
-  const ticksPerBar = (beats * 192) / beatValue;
+  const bars = findBars(placed, bpm);
+  const { beats, beatValue, ticksPerBar } = meterOf(meter ?? bars.meter);
   const moments = [...new Set(placed.map(n => `${n.tick}|${n.hand}`))].map(id => {
     const [tick, hand] = id.split('|');
     return {
@@ -287,7 +337,8 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
       size: placed.filter(n => n.tick === Number(tick) && n.hand === hand).length,
     };
   });
-  const phase = barPhase(moments, ticksPerBar);
+  const sameLength = meterOf(bars.meter).ticksPerBar === ticksPerBar;
+  const phase = sameLength && bars.place !== null ? bars.place : barPhase(moments, ticksPerBar);
   const pickup = (ticksPerBar - phase) % ticksPerBar;
   const moved = placed.map(n => ({ ...n, tick: n.tick + pickup }));
   const key = findKey(notes);

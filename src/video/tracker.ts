@@ -18,6 +18,7 @@ const FAINT = 0.65; // share of a real bar's brightness below which something is
 const SOLID = 0.6; // share of it that a single pixel needs to belong to a bar
 const NEAR_NOTE = 0.05; // seconds; something this close to a note on its key is part of that note
 const LETTER_GAP = 0.25; // key widths; many videos write the note's name into the bar, with an outline
+const LETTER_WIDTH = 1; // key widths of dimmer pixels inside a bar: a letter's inside, between its strokes
 const BRIDGE = 0.12; // seconds a letter may darken a bar for...
 const BRIDGE_LEVEL = 0.25; // ...as long as its lane stays this bright; between two notes it goes dark
 const SHADE_SECONDS = 0.1; // a second, darker shade of bars: seen only in bars at least this long...
@@ -193,16 +194,23 @@ export class Tracker {
   private runsOf(row: Uint8Array, usual: number[][], limits: Float32Array) {
     const { unit } = this.keys;
     const gap = unit * LETTER_GAP;
+    const wide = unit * LETTER_WIDTH;
     const runs: Run[] = [];
     let from = -1;
     let last = -1;
+    let dark = 0;
     for (let x = 0; x <= this.width; x++) {
-      const lit = x < this.width
-        && Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2]) > limits[x];
-      if (lit) {
+      const change = x < this.width
+        ? Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2])
+        : 0;
+      if (x < this.width && change > limits[x]) {
         if (from < 0) from = x;
         last = x;
-      } else if (from >= 0 && (x === this.width || x - last > gap)) {
+        dark = 0;
+        continue;
+      }
+      if (change <= CHANGE) dark++;
+      if (from >= 0 && (x === this.width || dark > gap || x - last > wide)) {
         const width = last + 1 - from;
         if (width >= unit * 0.3) {
           const parts = width >= unit * 1.6 ? Math.round(width / unit) : 1;
@@ -366,13 +374,14 @@ export class Tracker {
   }
 
   // Some videos draw one hand's black keys far darker than everything else, as dark as sparks. But
-  // they do it the same way every time. Bars of one clear colour and brightness are real.
+  // they do it the same way every time. If most clear bars here look alike, that is such a colour,
+  // and all of them are real: a letter makes some a little brighter.
   private secondShade(seen: Found[]) {
     const clear = seen.filter(f => f.vividness >= VIVID && this.times[f.bar.last] - this.times[f.bar.first] >= SHADE_SECONDS);
     if (clear.length < SHADE_BARS) return [];
     const middle = median(clear.map(f => f.strength));
     const alike = clear.filter(f => Math.abs(f.strength - middle) <= SHADE_SPREAD * middle);
-    return alike.length >= SHADE_SHARE * clear.length ? alike : [];
+    return alike.length >= SHADE_SHARE * clear.length ? clear : [];
   }
 
   private isLong(bar: Bar) {

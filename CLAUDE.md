@@ -80,8 +80,10 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     of key, now 3). Many videos write the note's name into the bar: small gaps across a bar are
     closed (`LETTER_GAP`), gaps along it bridged (`bridged`: the lane never falls back to background,
     `BRIDGE_LEVEL` tells that apart from two notes in a row), the colour comes from the most
-    colourful pixel. `secondShade`: some videos draw one hand's black keys as dark as sparks, but
-    always alike (one colour, one brightness); sparks vary. Sparks must never pass that test.
+    colourful pixel, and dimmer pixels of a letter's inside join its bright strokes
+    (`LETTER_WIDTH`): else a bar on E is read as the D sharp beside it. `secondShade`: some videos
+    draw one hand's black keys as dark as sparks, but always alike (one colour, one brightness);
+    sparks vary. Sparks must never pass that test.
     Dropped: faint things (dust, compared with long bars nearby), colourless things (the player's
     pause symbol, text), pieces inside a long bar, pictures without a keyboard (transitions, ads).
     What the first look saw and the second didn't goes to `doubtful`, for the sound to judge.
@@ -94,8 +96,12 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     best chain of beats through the whole piece,** with four sixteenths to each beat, far stiffer
     for machine-made pieces. Never count on from note to note: milliseconds of uneven note starts
     lost an eighth in the middle of a piece, and every bar line after it. Rolled chords are
-    grouped, short chords held to the next. One voice per hand, always 4/4. The tempo may drift:
-    Cinnamon Girl goes from 1.0 s to about 0.9 s per beat, so 64 BPM and 41 bars are right for it.
+    grouped, short chords held to the next. One voice per hand. **Bars come from the bass**
+    (`bassPlace`): the lowest note of a stretch one bar long keeps falling on the same place, the
+    one. That tells 12 from 16 sixteenths by far (8.9 against 3.5 times chance, 12.3 against 4) and
+    where bars start. 3/4 or 6/8 can't be told from the notes, so it goes by tempo, and the import
+    page lets the user choose. The tempo may drift: Cinnamon Girl goes from 1.0 s to about 0.9 s
+    per beat, so 64 BPM and 41 bars are right for it.
   - `sound.ts`: **the picture proposes, the sound decides.** `soundOf` decodes the file's sound
     (no sound or unreadable = null, then the picture stands alone). `judge` finds the delay between
     bar and sound (0.36 s here), learns what each key sounds like from where the picture says it is
@@ -168,7 +174,9 @@ from real Chrome replay the tracker in seconds instead of minutes.
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
   A YouTube link was discussed and declined: reading the running tab works only on the PC, a
   download server is against YouTube's terms and fragile.
-- The reading always writes 4/4, sixteenths at the finest, one voice per hand. Missing: 3/4 and 6/8,
-  triplets, held notes under a melody. Tidier note values for played music.
+- The reading writes sixteenths at the finest and one voice per hand. Missing: triplets, held notes
+  under a melody. Tidier note values for played music.
+- Below about 25 pictures a second the tempo reading tips over (19 a second: 68 instead of 130 BPM,
+  though nearly all notes are found). `ENOUGH` slows the video down before that.
 - Not yet: slurs, dynamics, pedal, repeat signs, PNG/PDF export (the old site had PNG), keyboard
   shortcuts on the PC, installing as an app (manifest, icons, service worker).

@@ -8,7 +8,7 @@
 //   step, offset: the grid of a machine-made piece, seconds per eighth and where it starts
 //   from, to: the stretch where it runs on that grid
 //   pattern: eighths after which it repeats, which lets holes be counted without an original
-//   bar: sixteenths per bar, for how well the bar lines meet the changes of the bass
+//   takte: the time signature it has to come out in
 // `.messung/grenzen.json` holds the limits; `node scripts/messlatte.mjs --merken` writes today's values.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -27,12 +27,14 @@ const LEN = { w: 192, h: 96, q: 48, 8: 24, 16: 12, 32: 6 };
 const ticksOf = e => LEN[e.dur] * (e.dotted ? 1.5 : 1);
 const nm = m => 'C Cis D Dis E F Fis G Gis A B H'.split(' ')[m % 12] + (Math.floor(m / 12) - 1);
 
-function replay(dir) {
+// `every`: only each so many pictures, as a busy or slow device delivers them
+function replay(dir, every) {
   const info = JSON.parse(readFileSync(join(dir, 'info.json'), 'utf8'));
   const rows = readFileSync(join(dir, 'rows.bin'));
   const W = info.width;
   const tracker = new Tracker(info.keys);
   info.times.forEach((time, f) => {
+    if (f % every) return;
     const data = new Uint8ClampedArray(W * 4);
     for (let x = 0; x < W; x++) {
       const at = (f * W + x) * 3;
@@ -137,13 +139,14 @@ function barFit(reading, bar) {
 
 const results = {};
 const only = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const every = Number(process.argv.find(a => a.startsWith('--jedes='))?.slice(8) ?? 1);
 for (const name of readdirSync(DATA, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)) {
   if (only.length && !only.includes(name)) continue;
   const dir = join(DATA, name);
   if (!existsSync(join(dir, 'rows.bin'))) continue;
   const truth = existsSync(join(dir, 'wahrheit.json')) ? JSON.parse(readFileSync(join(dir, 'wahrheit.json'), 'utf8')) : {};
   const began = Date.now();
-  const { notes, doubtful, barSeen } = replay(dir);
+  const { notes, doubtful, barSeen } = replay(dir, every);
   const raw = readFileSync(join(dir, 'rec11.f32'));
   const samples = new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4);
   const checked = await judge(notes, doubtful, samples);
@@ -159,6 +162,7 @@ for (const name of readdirSync(DATA, { withFileTypes: true }).filter(d => d.isDi
     tempo: Number(reading.bpm.toFixed(1)),
     exakt: reading.sure,
     takte: `${reading.piece.beats}/${reading.piece.beatValue}`,
+    ...(checked ? { ton: `+${checked.hearing.added} ~${checked.hearing.moved} -${checked.hearing.dropped}` } : {}),
   };
   if (truth.step) {
     const hole = holes(final, truth, barSeen);
@@ -172,16 +176,16 @@ for (const name of readdirSync(DATA, { withFileTypes: true }).filter(d => d.isDi
     });
     if (process.argv.includes('--liste')) console.log('  Löcher:', hole.list.join(', '));
   }
-  if (truth.bar) {
-    const fit = barFit(reading, truth.bar);
-    result.basswechselAufDerEins = fit.all ? Math.round((100 * fit.on) / fit.all) : null;
-  }
+  const fit = barFit(reading, ((reading.piece.beats * 192) / reading.piece.beatValue) / 12);
+  result.basswechselAufDerEins = fit.all ? Math.round((100 * fit.on) / fit.all) : null;
   results[name] = result;
   console.log(name.padEnd(12), `${((Date.now() - began) / 1000).toFixed(1)} s`, JSON.stringify(result));
 }
 
 const limitsFile = join(DATA, 'grenzen.json');
-if (process.argv.includes('--merken')) {
+if (every > 1) {
+  // Fewer pictures are allowed to be a little worse: only the numbers are of interest
+} else if (process.argv.includes('--merken')) {
   writeFileSync(limitsFile, JSON.stringify(results, null, 1));
   console.log('Als Grenze gemerkt.');
 } else if (existsSync(limitsFile)) {
@@ -196,6 +200,7 @@ if (process.argv.includes('--merken')) {
     for (const field of worseIfHigher) if (result[field] > limit[field]) problems.push(`${name}: ${field} ${limit[field]} wurde zu ${result[field]}`);
     for (const field of worseIfLower) if (result[field] < limit[field]) problems.push(`${name}: ${field} ${limit[field]} wurde zu ${result[field]}`);
     if (Math.abs(result.noten - limit.noten) > limit.noten * 0.03) problems.push(`${name}: noten ${limit.noten} wurde zu ${result.noten}`);
+    if (result.takte !== limit.takte) problems.push(`${name}: takte ${limit.takte} wurde zu ${result.takte}`);
   }
   console.log(problems.length ? `SCHLECHTER:\n  ${problems.join('\n  ')}` : 'Nichts schlechter als die Grenzen.');
   if (problems.length) process.exitCode = 1;

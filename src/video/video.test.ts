@@ -203,6 +203,26 @@ describe('Tracker', () => {
     expect(notes.filter(n => n.midi !== 72).map(n => n.midi)).toEqual([73, 75]);
   });
 
+  it('keeps a wide letter from pulling a bar onto the black key beside it', () => {
+    const map = findKeyboard(picture(21, 108));
+    if (!map) throw new Error('keine Tastatur');
+    const tracker = new Tracker(map);
+    const x = map.keys.find(k => k.midi === 64)?.x ?? 0;
+    const others = [0.1, 0.7, 2.1].map(start => ({ midi: 76, start, end: start + 0.4, color: GREEN }));
+    for (let f = 0; f < 90; f++) {
+      const time = f / 30;
+      const frame = picture(21, 108, others.filter(n => time >= n.start && time < n.end));
+      if (time >= 1 && time < 1.4) {
+        // A bright left edge, then the dimmer inside of the letter over most of the bar
+        rect(frame, x - 11, 0, 6, TOP, [240, 240, 60]);
+        rect(frame, x - 5, 0, 14, TOP, [110, 110, 30]);
+        rect(frame, x + 9, 0, 2, TOP, [240, 240, 60]);
+      }
+      tracker.add(rowOf(frame, map.scanY), time);
+    }
+    expect(tracker.finish().filter(n => n.midi < 70).map(n => n.midi)).toEqual([64]);
+  });
+
   it('reads a bar with a letter in it as one note', () => {
     const map = findKeyboard(picture(21, 108));
     if (!map) throw new Error('keine Tastatur');
@@ -392,6 +412,43 @@ describe('writeDown', () => {
     expect(bpm).toBeCloseTo(130, 0);
     const first = [...placed].sort((a, b) => a.start - b.start);
     first.forEach((p, i) => expect(p.tick - first[0].tick).toBe(i * 24));
+  });
+
+  // A broken chord over six eighths, the bass on the first of them
+  const brokenChords = (count: number, eighth: number, from = 0) => Array.from({ length: count }, (_, i) => {
+    const start = 1 + i * eighth;
+    const chord = [[48, 52, 55, 60, 55, 52], [43, 47, 50, 55, 50, 47]][Math.floor((i + from) / 12) % 2];
+    return note(chord[(i + from) % 6], start, start + eighth * 0.85, 'left');
+  });
+
+  it('hears six eighths to the bar, and where the bar starts', () => {
+    const { piece, placed } = writeDown(brokenChords(240, 60 / 130 / 2, 4));
+    expect([piece.beats, piece.beatValue]).toEqual([6, 8]);
+    const lowest = placed.filter(p => p.midi === 48);
+    expect(lowest.every(p => p.tick % 144 === 0)).toBe(true);
+  });
+
+  it('calls it 3/4 when the eighths are slow', () => {
+    const { piece } = writeDown(brokenChords(240, 60 / 80 / 2));
+    expect([piece.beats, piece.beatValue]).toEqual([3, 4]);
+  });
+
+  it('stays in 4/4 with a bass on every bar of four', () => {
+    const eighth = 60 / 120 / 2;
+    const notes = Array.from({ length: 240 }, (_, i) => {
+      const start = 1 + i * eighth;
+      const chord = [[48, 52, 55, 60, 64, 60, 55, 52], [41, 45, 48, 53, 57, 53, 48, 45]][Math.floor(i / 16) % 2];
+      return note(chord[i % 8], start, start + eighth * 0.85, 'left');
+    });
+    const { piece, placed } = writeDown(notes);
+    expect([piece.beats, piece.beatValue]).toEqual([4, 4]);
+    expect(placed.filter(p => p.midi === 48 && p.start < 4.9).map(p => p.tick)).toEqual([0, 192]);
+  });
+
+  it('writes the time signature it is told to', () => {
+    const { piece } = writeDown(brokenChords(240, 60 / 130 / 2), { meter: '4/4' });
+    expect([piece.beats, piece.beatValue]).toEqual([4, 4]);
+    expect(writeDown(brokenChords(240, 60 / 130 / 2), { meter: '3/4' }).piece.beats).toBe(3);
   });
 
   it('survives an empty list', () => {
