@@ -72,6 +72,23 @@ export interface Sound {
   evId: string;
 }
 
+// The sounds reaching into a stretch of ticks, without looking at all the others. `sounds` must be
+// sorted by start, `longest` is the length of the longest.
+export function soundsBetween(sounds: Sound[], from: number, to: number, longest: number) {
+  let low = 0;
+  let high = sounds.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (sounds[middle].start < from - longest) low = middle + 1;
+    else high = middle;
+  }
+  const found: Sound[] = [];
+  for (let i = low; i < sounds.length && sounds[i].start <= to; i++) {
+    if (sounds[i].start + sounds[i].length > from) found.push(sounds[i]);
+  }
+  return found;
+}
+
 export function timeline(piece: Piece): Sound[] {
   const sounds: Sound[] = [];
   for (const hand of ['right', 'left'] as const) {

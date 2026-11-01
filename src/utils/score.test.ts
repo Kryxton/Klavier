@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Duration, Ev, Piece } from '../types';
-import { barCount, barOfEvent, eventsOfBar, eventTicks, splitTicks, timeline, toBars } from './score';
+import { barCount, barOfEvent, eventsOfBar, eventTicks, splitTicks, soundsBetween, timeline, toBars } from './score';
 
 let next = 0;
 const ev = (dur: Duration, keys: number[] = [60], extra: Partial<Ev> = {}): Ev => ({ id: `e${next++}`, keys, dur, ...extra });
@@ -88,5 +88,20 @@ describe('bars of a piece', () => {
 
   it('knows dotted lengths', () => {
     expect(eventTicks({ dur: 'q', dotted: true })).toBe(72);
+  });
+});
+
+describe('soundsBetween', () => {
+  const sound = (start: number, length: number) => ({ midi: 60, hand: 'right' as const, start, length, evId: String(start) });
+  const sounds = [sound(0, 200), sound(10, 10), sound(50, 10), sound(100, 10), sound(300, 10)];
+  const starts = (from: number, to: number) => soundsBetween(sounds, from, to, 200).map(s => s.start);
+
+  it('finds what reaches into the stretch, however early it began', () => {
+    expect(starts(60, 120)).toEqual([0, 100]);
+  });
+
+  it('leaves out what ended before and what starts after', () => {
+    expect(starts(205, 250)).toEqual([]);
+    expect(starts(55, 55)).toEqual([0, 50]);
   });
 });

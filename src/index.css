@@ -17,6 +17,25 @@
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* The falling notes play on the black lacquer of a piano. Static: most are read only by the
+   canvas, and Tailwind would leave out what no class uses. */
+@theme static {
+  --color-stage: #0b0c0e;
+  --color-stage-light: #17181c;
+  --color-stage-line: #24262b;
+  --color-ivory: #f6f3ec;
+  --color-ivory-dark: #cfcbc1;
+  --color-ebony: #101114;
+  --color-bar-right: #e63946;
+  --color-bar-right-dark: #a81e2a;
+  --color-bar-right-on: #ff8a8f;
+  --color-bar-left: #e8dfc9;
+  --color-bar-left-dark: #a89f8b;
+  --color-bar-left-on: #fff8e8;
+  --color-key-right: #e63946;
+  --color-key-left: #c9a35a;
+}
+
 html {
   background: var(--color-ink);
   /* Stop iOS from enlarging text on rotation */

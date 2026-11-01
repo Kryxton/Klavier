@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Hand, Piece } from '../types';
 import { audioClock, unlockAudio } from './audio';
 import { Player, type Loop } from './player';
-import { timeline } from './score';
+import { soundsBetween, timeline } from './score';
 
 export type HandChoice = Hand | 'both';
 
 const TIMER_MS = 40;
 
 // Everything the Üben page needs from the player. `active` = what sounds right now; it changes
-// only when a note starts or ends, the position is read directly from `player` for drawing.
-export function usePlayer(piece: Piece, hands: HandChoice, speed: number, loop: Loop | null) {
+// only when a note starts or ends, the position is read directly from `player` for drawing. Whoever
+// draws from the position itself sets `followNotes` to false and saves all those redraws.
+export function usePlayer(piece: Piece, hands: HandChoice, speed: number, loop: Loop | null, followNotes = true) {
   const player = useRef<Player | null>(null);
   player.current ??= new Player(audioClock);
   const current = player.current;
@@ -36,12 +37,14 @@ export function usePlayer(piece: Piece, hands: HandChoice, speed: number, loop: 
   }, [current, running]);
 
   useEffect(() => {
+    if (!followNotes) return;
+    const longest = played.reduce((most, s) => Math.max(most, s.length), 0);
     let frame = 0;
     let shown = '';
     const update = () => {
       frame = requestAnimationFrame(update);
       const at = current.isRunning() ? current.position() : -1;
-      const now = played.filter(s => at >= s.start && at < s.start + s.length);
+      const now = soundsBetween(played, at, at, longest).filter(s => s.start <= at);
       const key = now.map(s => s.evId + s.midi).join();
       if (key === shown) return;
       shown = key;
@@ -49,7 +52,7 @@ export function usePlayer(piece: Piece, hands: HandChoice, speed: number, loop: 
     };
     update();
     return () => cancelAnimationFrame(frame);
-  }, [current, played]);
+  }, [current, played, followNotes]);
 
   const toggle = useCallback(() => {
     if (current.isRunning()) {

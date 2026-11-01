@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pause, Play, Repeat, SkipBack } from 'lucide-react';
 import { Falling } from '../components/Falling';
-import { Keyboard } from '../components/Keyboard';
 import { Sheet } from '../components/Sheet';
 import { Choice, Empty, ICON_BUTTON, INPUT, SHEET, Toggle } from '../components/ui';
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
-import { HIGHEST, LOWEST } from '../utils/notes';
-import { barCount, barTicks, type Sound } from '../utils/score';
+import { barCount, barTicks } from '../utils/score';
 import { usePlayer, type HandChoice } from '../utils/usePlayer';
 
 type View = 'falling' | 'sheet';
@@ -20,19 +18,6 @@ const HANDS: { id: HandChoice; label: string }[] = [
   { id: 'right', label: 'Rechts' },
   { id: 'left', label: 'Links' },
 ];
-
-// The octaves a piece uses, so the keyboard fits the screen; at least two octaves
-function rangeOf(sounds: Sound[]) {
-  if (!sounds.length) return { low: 48, high: 84 };
-  const keys = sounds.map(s => s.midi);
-  let low = Math.max(LOWEST, Math.min(...keys) - (Math.min(...keys) % 12));
-  let high = Math.min(HIGHEST, Math.max(...keys) + (12 - (Math.max(...keys) % 12)) % 12);
-  if (high - low < 24) {
-    low = Math.max(LOWEST, low - 12);
-    high = Math.min(HIGHEST, high + 12);
-  }
-  return { low, high };
-}
 
 export function Practice({ piece }: { piece: Piece }) {
   const [view, setView] = useState<View>('sheet');
@@ -52,8 +37,7 @@ export function Practice({ piece }: { piece: Piece }) {
     [looping, first, last, ticks],
   );
 
-  const { player, sounds, running, active, toggle } = usePlayer(piece, hands, speed / 100, loop);
-  const { low, high } = useMemo(() => rangeOf(sounds), [sounds]);
+  const { player, sounds, running, active, toggle } = usePlayer(piece, hands, speed / 100, loop, view === 'sheet');
 
   // The bar number only needs to follow roughly
   useEffect(() => {
@@ -73,12 +57,9 @@ export function Practice({ piece }: { piece: Piece }) {
       </header>
 
       {view === 'falling' ? (
-        <div className="flex-1 min-h-0 flex flex-col md:px-6 md:pb-4">
-          <div className={cn(SHEET, 'flex-1 min-h-0 overflow-hidden flex flex-col')}>
-            <div className="flex-1 min-h-0">
-              <Falling player={player} sounds={sounds} low={low} high={high} ticksPerBar={ticks} hands={hands} />
-            </div>
-            <Keyboard low={low} high={high} fit active={active.keys} className="h-16 sm:h-24 border-t border-line" />
+        <div className="flex-1 min-h-0 md:px-6">
+          <div className="appear h-full overflow-hidden bg-stage md:rounded-2xl">
+            <Falling player={player} sounds={sounds} ticksPerBar={ticks} hands={hands} />
           </div>
         </div>
       ) : (
