@@ -8,9 +8,11 @@ import { Write } from './pages/Write';
 import type { Piece } from './types';
 import { cn } from './utils/cn';
 import { newPiece } from './utils/edit';
+import { deleteRecording, saveRecording } from './utils/recordings';
 import { smoothly } from './utils/smooth';
 import { loadLibrary, mergePieces, saveLibrary, type Library } from './utils/storage';
 import { useUpdateAvailable } from './utils/update';
+import { RATE } from './video/sound';
 
 type Page = 'pieces' | 'import' | 'write' | 'practice';
 const NAV: { id: Page; label: string; icon: typeof ListMusic }[] = [
@@ -77,14 +79,16 @@ export default function App() {
     setPage('write');
   };
 
-  const createFrom = (title: string, fields: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>) => {
+  const createFrom = (title: string, fields: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands' | 'source'>, samples: Float32Array | null) => {
     const fresh = { ...newPiece(title || 'Neues Stück'), ...fields };
+    if (samples) void saveRecording(fresh.id, samples, RATE);
     setLibrary(old => ({ pieces: [...old.pieces, fresh], openId: fresh.id }));
     setSteps({ past: [], future: [] });
     setPage('write');
   };
 
   const remove = (id: string) => {
+    void deleteRecording(id);
     setLibrary(old => ({ pieces: old.pieces.filter(p => p.id !== id), openId: old.openId === id ? null : old.openId }));
     if (id === library.openId) setSteps({ past: [], future: [] });
   };

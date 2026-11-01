@@ -12,6 +12,12 @@ export interface Ev {
   spell?: Record<number, Accidental>; // black key written against the key signature's default
 }
 
+// What is known about a piece read from a video
+export interface Source {
+  moments: [number, number][]; // tick against seconds in the recording, ascending
+  unsure: string[]; // events where picture and sound disagree: the first place to look when correcting
+}
+
 export interface Piece {
   id: string;
   title: string;
@@ -21,4 +27,5 @@ export interface Piece {
   bpm: number; // quarter notes per minute
   hands: Record<Hand, Ev[]>;
   updatedAt: string;
+  source?: Source;
 }

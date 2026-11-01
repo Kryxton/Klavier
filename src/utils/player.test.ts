@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Player } from './player';
+import { Player, type Recording } from './player';
 import type { Sound } from './score';
 
 const sound = (start: number, midi = 60, length = 48): Sound => ({ midi, hand: 'right', start, length, evId: `e${start}` });
@@ -204,5 +204,83 @@ describe('Counting in', () => {
     run(player, 0.1);
     expect(clicks[heard].strong).toBe(true);
     expect(clicks[heard].when).toBeCloseTo(101, 5);
+  });
+});
+
+describe('Player with a recording', () => {
+  // A recording that runs on its own, at one tick for each tick of `now`
+  function setup() {
+    const clock = { now: 0, played: 0 };
+    const calls: string[] = [];
+    let at = 0;
+    let ended = false;
+    const recording: Recording = {
+      play: (tick, speed) => {
+        at = tick;
+        calls.push(`play ${tick} ${speed}`);
+      },
+      pause: () => calls.push('pause'),
+      at: () => at,
+      ended: () => ended,
+    };
+    const player = new Player({
+      now: () => clock.now,
+      play: () => { clock.played++; },
+      click: () => {},
+      silence: () => {},
+    });
+    player.load([{ midi: 60, hand: 'right', start: 0, length: 96, evId: 'a' }], 60);
+    return { player, recording, calls, clock, move: (tick: number) => { at = tick; }, finish: () => { ended = true; } };
+  }
+
+  it('lets the recording sound and follows it', () => {
+    const { player, recording, calls, clock, move } = setup();
+    player.setRecording(recording);
+    player.start(24);
+    move(40);
+    expect(calls).toEqual(['play 24 1']);
+    expect(player.position()).toBe(40);
+    player.tick();
+    expect(clock.played).toBe(0);
+  });
+
+  it('switches between notes and recording at the same place while playing', () => {
+    const { player, recording, calls, clock } = setup();
+    player.start(12);
+    expect(clock.played).toBeGreaterThanOrEqual(0);
+    clock.now = 1;
+    const at = player.position();
+    player.setRecording(recording);
+    expect(calls).toEqual([`play ${at} 1`]);
+    expect(player.isRunning()).toBe(true);
+  });
+
+  it('jumps back at the end of a loop', () => {
+    const { player, recording, calls, move } = setup();
+    player.setRecording(recording);
+    player.setLoop({ from: 48, to: 96 });
+    player.start(48);
+    move(100);
+    expect(player.tick()).toBe(true);
+    expect(calls).toEqual(['play 48 1', 'play 48 1']);
+  });
+
+  it('stops with the recording and starts over', () => {
+    const { player, recording, finish } = setup();
+    player.setRecording(recording);
+    player.start(0);
+    finish();
+    expect(player.tick()).toBe(false);
+    expect(player.isRunning()).toBe(false);
+    expect(player.position()).toBe(0);
+  });
+
+  it('carries the speed over to the recording', () => {
+    const { player, recording, calls, move } = setup();
+    player.setRecording(recording);
+    player.start(0);
+    move(30);
+    player.setSpeed(0.5);
+    expect(calls).toEqual(['play 0 1', 'play 30 0.5']);
   });
 });

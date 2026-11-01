@@ -8,6 +8,7 @@ export interface Detected {
   start: number; // seconds
   end: number;
   hand: Hand;
+  unsure?: boolean; // picture and sound disagree about this note
 }
 
 const BACKGROUND_SAMPLE = 1500; // pictures

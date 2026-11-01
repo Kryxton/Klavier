@@ -278,15 +278,15 @@ const scrollerOf = (element: HTMLElement) => {
 // The two-handed score. Only the lines near the screen exist as pictures, so a long piece opens as
 // fast as a short one and an edit redraws just those. Which notes are selected or sounding only
 // switches a class on the notes concerned, so playback doesn't redraw anything.
-export function Sheet({ piece, selected, active, follow, onSelect, bars, onBar }: {
-  piece: Piece; selected?: string | null; active?: ReadonlySet<string>; follow?: string | null;
+export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars, onBar }: {
+  piece: Piece; selected?: string | null; active?: ReadonlySet<string>; doubts?: ReadonlySet<string>; follow?: string | null;
   onSelect?: (hand: Hand, id: string) => void;
   bars?: Bars | null; onBar?: (bar: number) => void; // with onBar a tap means a bar, not a note
 }) {
   const host = useRef<HTMLDivElement>(null);
   const notes = useRef(new Map<number, DrawnNote[]>());
   const byId = useRef(new Map<string, DrawnNote[]>());
-  const lit = useRef({ selected, active });
+  const lit = useRef<{ selected?: string | null; active?: ReadonlySet<string>; doubts?: ReadonlySet<string> }>({ selected, active, doubts });
   const shown = useRef(new Set<string>());
   const followed = useRef(-1);
   const [width, setWidth] = useState(0);
@@ -311,7 +311,13 @@ export function Sheet({ piece, selected, active, follow, onSelect, bars, onBar }
   const mark = (note: DrawnNote) => {
     note.el.classList.toggle('note-selected', note.id === lit.current.selected);
     note.el.classList.toggle('note-playing', Boolean(lit.current.active?.has(note.id)));
+    note.el.classList.toggle('note-unsure', Boolean(lit.current.doubts?.has(note.id)));
   };
+
+  useEffect(() => {
+    lit.current.doubts = doubts;
+    for (const line of notes.current.values()) line.forEach(mark);
+  }, [doubts, drawCount]);
 
   useEffect(() => {
     const box = host.current;
@@ -355,7 +361,7 @@ export function Sheet({ piece, selected, active, follow, onSelect, bars, onBar }
   useEffect(() => {
     const now = new Set<string>(active);
     if (selected) now.add(selected);
-    lit.current = { selected, active };
+    lit.current = { ...lit.current, selected, active };
     for (const id of new Set([...shown.current, ...now])) byId.current.get(id)?.forEach(mark);
     shown.current = now;
   }, [selected, active, drawCount]);

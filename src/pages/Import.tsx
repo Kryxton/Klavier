@@ -10,7 +10,7 @@ import { writeDown, type Meter } from '../video/rhythm';
 import type { Hearing } from '../video/sound';
 import type { Detected } from '../video/tracker';
 
-type Fields = Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>;
+type Fields = Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands' | 'source'>;
 const TEMPOS = [{ id: 0.5, label: 'Halb' }, { id: 1, label: 'Normal' }, { id: 2, label: 'Doppelt' }];
 const OCTAVES = [-2, -1, 0, 1, 2].map(id => ({ id, label: id > 0 ? `+${id}` : String(id) }));
 const METERS: { id: Meter; label: string }[] = [{ id: '4/4', label: '4/4' }, { id: '3/4', label: '3/4' }, { id: '6/8', label: '6/8' }];
@@ -22,11 +22,11 @@ const titleFrom = (file: File) => {
   return /^(ScreenRecording|RPReplay|IMG_|Bildschirmaufnahme|Screen Recording)/i.test(name) ? 'Neues Stück' : name;
 };
 
-export function Import({ first, onCreate, onCancel }: { first?: File | null; onCreate: (title: string, fields: Fields) => void; onCancel: () => void }) {
+export function Import({ first, onCreate, onCancel }: { first?: File | null; onCreate: (title: string, fields: Fields, samples: Float32Array | null) => void; onCancel: () => void }) {
   const [progress, setProgress] = useState<number | null>(null);
   const [stage, setStage] = useState<Stage>('keys');
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ notes: Detected[]; hearing: Hearing | null; fullKeyboard: boolean } | null>(null);
+  const [result, setResult] = useState<{ notes: Detected[]; hearing: Hearing | null; samples: Float32Array | null; fullKeyboard: boolean } | null>(null);
   const [title, setTitle] = useState('');
   const [octave, setOctave] = useState(0);
   const [tempoFactor, setTempoFactor] = useState(1);
@@ -34,7 +34,10 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
   const input = useRef<HTMLInputElement>(null);
   const running = useRef<AbortController | null>(null);
 
-  const reading = useMemo(() => (result ? writeDown(result.notes, { octave, tempoFactor, meter }) : null), [result, octave, tempoFactor, meter]);
+  const reading = useMemo(
+    () => (result ? writeDown(result.notes, { octave, tempoFactor, meter, lag: result.hearing?.lag }) : null),
+    [result, octave, tempoFactor, meter],
+  );
 
   const start = async (file?: File | null) => {
     if (!file) return;
@@ -109,7 +112,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
                 `${result.hearing.added} ergänzt`,
                 `${result.hearing.moved} korrigiert`,
                 `${result.hearing.dropped} entfernt`,
-              ].join(', ')}.`
+              ].join(', ')}. ${result.hearing.unsure} ${result.hearing.unsure === 1 ? 'Stelle ist' : 'Stellen sind'} beim Korrigieren markiert.`
             : 'Nur aus dem Bild gelesen: Den Ton des Videos konnte ich nicht mit den Noten vergleichen.'}
         </p>
 
@@ -137,7 +140,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
         </div>
 
         <div className="mt-7 grid gap-1">
-          <button type="button" onClick={() => onCreate(title, reading.piece)} className={BUTTON_RED}>Notenblatt erstellen</button>
+          <button type="button" onClick={() => onCreate(title, reading.piece, result.samples)} className={BUTTON_RED}>Notenblatt erstellen</button>
           <button type="button" onClick={() => setResult(null)} className={TEXT_BUTTON}>Anderes Video</button>
         </div>
       </Screen>

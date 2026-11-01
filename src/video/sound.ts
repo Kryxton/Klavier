@@ -36,6 +36,7 @@ export interface Hearing {
   added: number;
   moved: number;
   dropped: number;
+  unsure: number; // notes kept although picture and sound disagree
 }
 
 export interface Checked {
@@ -331,7 +332,7 @@ export async function judge(notes: Detected[], doubtful: Detected[], samples: Fl
   const added: Detected[] = [];
   for (const note of [...doubtful].sort((a, b) => a.start - b.start)) {
     const twice = added.some(other => other.midi === note.midi && Math.abs(other.start - note.start) < SAME_NOTE);
-    if (!twice && clearly(note.midi, note.start) >= CLEAR) added.push(note);
+    if (!twice && clearly(note.midi, note.start) >= CLEAR) added.push({ ...note, unsure: true });
   }
 
   const sounding = (list: Detected[], midi: number, start: number) =>
@@ -358,18 +359,19 @@ export async function judge(notes: Detected[], doubtful: Detected[], samples: Fl
       if (sounding(everything, neighbour.midi, note.start)) {
         dropped++;
       } else {
-        kept.push({ ...note, midi: neighbour.midi });
+        kept.push({ ...note, midi: neighbour.midi, unsure: true });
         moved++;
       }
     } else if (note.end - note.start <= FLICKER && here < NOTHING && level(note.midi, note.start) / typical < NOTHING_LEVEL) {
       dropped++;
     } else {
-      kept.push(note);
+      kept.push({ ...note, unsure: true });
     }
   }
+  const final = [...kept, ...added].sort((a, b) => a.start - b.start || a.midi - b.midi);
   return {
-    notes: [...kept, ...added].sort((a, b) => a.start - b.start || a.midi - b.midi),
-    hearing: { lag, heard: confirmed, added: added.length, moved, dropped },
+    notes: final,
+    hearing: { lag, heard: confirmed, added: added.length, moved, dropped, unsure: final.filter(n => n.unsure).length },
   };
 }
 

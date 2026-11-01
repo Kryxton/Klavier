@@ -9,6 +9,7 @@ import type { Bars } from '../utils/edit';
 import { barCount, barTicks } from '../utils/score';
 import { usePlayer, type HandChoice } from '../utils/usePlayer';
 import { useScreenAwake } from '../utils/wakeLock';
+import { useRecording } from '../utils/useRecording';
 
 type View = 'falling' | 'sheet';
 const VIEWS: { id: View; label: string }[] = [
@@ -37,7 +38,11 @@ export function Practice({ piece }: { piece: Piece }) {
   const ticks = barTicks(piece);
   const loop = useMemo(() => (loopBars ? { from: loopBars.from * ticks, to: (loopBars.to + 1) * ticks } : null), [loopBars, ticks]);
 
-  const { player, sounds, running, active, play, pause } = usePlayer(piece, { hands, speed: speed / 100, loop, pedal, countIn, followNotes: view === 'sheet' });
+  const recording = useRecording(piece);
+  const [original, setOriginal] = useState(false);
+  const { player, sounds, running, active, play, pause } = usePlayer(piece, {
+    hands, speed: speed / 100, loop, pedal, countIn, followNotes: view === 'sheet', recording: original ? recording : null,
+  });
 
   // The bar number only needs to follow roughly
   useEffect(() => {
@@ -128,7 +133,8 @@ export function Practice({ piece }: { piece: Piece }) {
           </label>
           <div className="flex w-full items-center gap-2 lg:w-auto">
             <Choice items={HANDS} value={hands} onChange={setHands} className="flex-1 min-w-0 lg:w-56 lg:flex-none" />
-            <Toggle on={pedal} onClick={() => setPedal(!pedal)} className="shrink-0 px-3">Pedal</Toggle>
+            {recording && <Toggle on={original} onClick={() => setOriginal(!original)} className="shrink-0 px-3">Original</Toggle>}
+            {!original && <Toggle on={pedal} onClick={() => setPedal(!pedal)} className="shrink-0 px-3">Pedal</Toggle>}
             <Toggle on={countIn} label="Vorzähler" onClick={() => setCountIn(!countIn)} className="w-9 shrink-0 px-0">
               <Metronome className="h-4 w-4" />
             </Toggle>

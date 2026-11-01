@@ -18,6 +18,14 @@ export interface CountIn {
   ticks: number;
 }
 
+// The video's own sound, heard instead of the notes. It keeps its own time and the player follows.
+export interface Recording {
+  play: (tick: number, speed: number) => void;
+  pause: () => void;
+  at: () => number; // the tick it has reached
+  ended: () => boolean;
+}
+
 // How far ahead notes are handed to the audio clock. Timers only wake the scheduler up; the notes
 // themselves are placed on the audio clock, so they stay exact even when a timer comes late.
 export const LOOKAHEAD = 0.25;
@@ -37,6 +45,7 @@ export class Player {
   private clicks: { when: number; strong: boolean }[] = []; // of the count, not yet given to the clock
   private countedIn = 0; // audio time the count ends
   private clock: Clock;
+  private recording: Recording | null = null;
 
   constructor(clock: Clock) {
     this.clock = clock;
@@ -56,9 +65,20 @@ export class Player {
     return this.running;
   }
 
+  // Heard from the same place on, so that notes and original can be compared while playing
+  setRecording(recording: Recording | null) {
+    const running = this.running;
+    const at = this.position();
+    if (running) this.stop();
+    this.recording = recording;
+    if (running) this.start(at);
+    else this.startTick = at;
+  }
+
   // Where the music is right now, in ticks
   position() {
     if (!this.running) return this.startTick;
+    if (this.recording) return this.recording.at();
     const now = this.clock.now();
     if (now < this.countedIn) return this.startTick;
     const tick = this.startTick + (now - this.startedAt) * this.ticksPerSecond();
@@ -83,7 +103,13 @@ export class Player {
   start(tick = this.startTick, countIn?: CountIn) {
     if (this.running) this.clock.silence();
     this.running = true;
-    this.rebase(this.loop && (tick < this.loop.from || tick >= this.loop.to) ? this.loop.from : tick);
+    const from = this.loop && (tick < this.loop.from || tick >= this.loop.to) ? this.loop.from : tick;
+    if (this.recording) {
+      this.startTick = from;
+      this.recording.play(from, this.speed);
+      return;
+    }
+    this.rebase(from);
     if (countIn) {
       const beat = countIn.ticks / this.ticksPerSecond();
       this.clicks = Array.from({ length: countIn.beats }, (_, i) => ({ when: this.startedAt + i * beat, strong: i === 0 }));
@@ -99,10 +125,12 @@ export class Player {
     this.startTick = at;
     this.endCount();
     this.clock.silence();
+    this.recording?.pause();
   }
 
   seek(tick: number) {
-    if (this.running) {
+    if (this.running && this.recording) this.recording.play(tick, this.speed);
+    else if (this.running) {
       this.clock.silence();
       this.rebase(tick);
       this.tick();
@@ -113,7 +141,8 @@ export class Player {
     const at = this.position();
     this.speed = speed;
     if (this.clock.now() < this.countedIn) return; // the count goes on as it began
-    if (this.running) this.rebase(at);
+    if (this.running && this.recording) this.recording.play(at, speed);
+    else if (this.running) this.rebase(at);
     else this.startTick = at;
   }
 
@@ -128,6 +157,7 @@ export class Player {
   // Call this every few dozen milliseconds. Returns false once the piece has ended.
   tick() {
     if (!this.running) return false;
+    if (this.recording) return this.followRecording(this.recording);
     const now = this.clock.now();
     while (this.clicks.length && this.clicks[0].when < now + LOOKAHEAD) {
       const { when, strong } = this.clicks.shift() as { when: number; strong: boolean };
@@ -152,6 +182,16 @@ export class Player {
     this.running = false;
     this.startTick = 0;
     return false;
+  }
+
+  private followRecording(recording: Recording) {
+    if (this.loop && recording.at() >= this.loop.to) recording.play(this.loop.from, this.speed);
+    else if (recording.ended()) {
+      this.running = false;
+      this.startTick = 0;
+      return false;
+    }
+    return true;
   }
 
   private timeOf(tick: number) {

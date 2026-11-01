@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { ArrowLeft, ArrowRight, Check, Copy, Plus, Printer, Redo2, Settings2, Trash2, Undo2 } from 'lucide-react';
 import { BarTools, useBarTool } from '../components/BarTools';
@@ -13,7 +13,7 @@ import {
   addEvent, duplicateEvent, insertBehind, moveEvent, removeEvent, removeLast, setLength, setSpelling, setTie, toggleKey,
 } from '../utils/edit';
 import { KEY_CHOICES, isBlack, label } from '../utils/notes';
-import { barCount, barOfEvent, barTicks, halves } from '../utils/score';
+import { barCount, barOfEvent, barTicks, eventTicks, halves } from '../utils/score';
 
 const DURATIONS: { id: Duration; name: string }[] = [
   { id: 'w', name: 'Ganze' },
@@ -113,6 +113,28 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
     if (event) change(current => setTie(current, hand, event.id, next));
   };
 
+  // Notes the reading of a video isn't sure of, in the order of the piece
+  const doubts = useMemo(() => new Set(piece.source?.unsure), [piece.source]);
+  const doubtOrder = useMemo(() => (['right', 'left'] as const).flatMap(noteHand => {
+    let tick = 0;
+    return piece.hands[noteHand].flatMap(ev => {
+      const place = tick;
+      tick += eventTicks(ev);
+      return doubts.has(ev.id) ? [{ id: ev.id, hand: noteHand, tick: place }] : [];
+    });
+  }).sort((a, b) => a.tick - b.tick), [piece.hands, doubts]);
+
+  const nextDoubt = () => {
+    const next = doubtOrder[(doubtOrder.findIndex(d => d.id === selected) + 1) % doubtOrder.length];
+    setFollow(next.id);
+    if (next.id !== selected) select(next.hand, next.id);
+  };
+
+  const acceptDoubt = () => {
+    nextDoubt();
+    change(current => (current.source ? { ...current, source: { ...current.source, unsure: current.source.unsure.filter(id => id !== selected) } } : current));
+  };
+
   const select = (noteHand: Hand, id: string) => {
     setTools(true);
     if (id === selected) return setSelected(null);
@@ -189,6 +211,15 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
         </button>
       </header>
 
+      {tools && doubtOrder.length > 0 && (
+        <div className="slide-up shrink-0 flex items-center gap-2 px-4 pb-1 text-[13px] text-dim md:px-6">
+          <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-doubt" />
+          <p className="flex-1 min-w-0">{doubtOrder.length === 1 ? '1 unsichere Note' : `${doubtOrder.length} unsichere Noten`}: Hier sind sich Bild und Ton nicht einig.</p>
+          {selected && doubts.has(selected) && <button type="button" onClick={acceptDoubt} className={TEXT_BUTTON}>Stimmt</button>}
+          <button type="button" onClick={nextDoubt} className={TEXT_BUTTON}>Nächste</button>
+        </div>
+      )}
+
       {settings && (
         <div className="slide-up shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-3 md:px-6">
           <label className={cn(LABEL, 'flex flex-col gap-1')}>Takt
@@ -219,7 +250,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
 
       <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto md:px-6 md:pb-4">
         <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
-          <Sheet piece={piece} selected={selected} follow={follow} onSelect={select} bars={barTool.marked} onBar={barTool.on ? barTool.tap : undefined} />
+          <Sheet piece={piece} selected={selected} doubts={tools ? doubts : undefined} follow={follow} onSelect={select} bars={barTool.marked} onBar={barTool.on ? barTool.tap : undefined} />
         </div>
       </div>
 

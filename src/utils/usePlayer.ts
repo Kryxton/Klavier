@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Hand, Piece } from '../types';
 import { audioClock, unlockAudio } from './audio';
 import { harmonies, harmonyBeat, withPedal } from './pedal';
-import { Player, type Loop } from './player';
+import { Player, type Loop, type Recording } from './player';
 import { soundsBetween, timeline } from './score';
 
 export type HandChoice = Hand | 'both';
@@ -13,8 +13,8 @@ const TIMER_MS = 40;
 // only when a note starts or ends, the position is read directly from `player` for drawing. Whoever
 // draws from the position itself sets `followNotes` to false and saves all those redraws. The
 // pedal changes only what is heard: the notes stay as written for everything that shows them.
-export function usePlayer(piece: Piece, { hands, speed, loop, pedal, countIn, followNotes }: {
-  hands: HandChoice; speed: number; loop: Loop | null; pedal: boolean; countIn: boolean; followNotes: boolean;
+export function usePlayer(piece: Piece, { hands, speed, loop, pedal, countIn, followNotes, recording }: {
+  hands: HandChoice; speed: number; loop: Loop | null; pedal: boolean; countIn: boolean; followNotes: boolean; recording: Recording | null;
 }) {
   const player = useRef<Player | null>(null);
   player.current ??= new Player(audioClock);
@@ -33,6 +33,7 @@ export function usePlayer(piece: Piece, { hands, speed, loop, pedal, countIn, fo
   }, [current, heard, piece.bpm]);
   useEffect(() => current.setSpeed(speed), [current, speed]);
   useEffect(() => current.setLoop(loop), [current, loop]);
+  useEffect(() => current.setRecording(recording), [current, recording]);
   useEffect(() => () => current.stop(), [current]);
 
   useEffect(() => {

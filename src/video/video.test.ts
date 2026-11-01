@@ -500,6 +500,14 @@ describe('writeDown', () => {
     expect(gaps.filter(gap => gap !== 24).length).toBeLessThan(8);
   });
 
+  it('remembers when each moment was played, and which notes are in doubt', () => {
+    const notes = Array.from({ length: 16 }, (_, i) => ({ ...note(60 + i, 1 + i * 0.5, 1.4 + i * 0.5), unsure: i === 3 }));
+    const { piece } = writeDown(notes);
+    expect(piece.source?.moments.slice(0, 3)).toEqual([[0, 1], [48, 1.5], [96, 2]]);
+    const doubted = piece.hands.right.concat(piece.hands.left).filter(e => piece.source?.unsure.includes(e.id));
+    expect(doubted.map(e => e.keys)).toEqual([[63]]);
+  });
+
   it('survives an empty list', () => {
     expect(writeDown([]).piece.hands.right).toEqual([]);
   });

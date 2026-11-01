@@ -223,7 +223,7 @@ async function read(file: File, progress: Progress, signal?: AbortSignal) {
       stoppedIf(signal);
       progress(soundFrom + (1 - soundFrom) * share, 'sound');
     });
-    return { notes: checked?.notes ?? notes, hearing: checked?.hearing ?? null, fullKeyboard: map.fullKeyboard };
+    return { notes: checked?.notes ?? notes, hearing: checked?.hearing ?? null, samples, fullKeyboard: map.fullKeyboard };
   } finally {
     close(video);
   }

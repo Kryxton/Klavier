@@ -335,7 +335,7 @@ const emit = (events: Ev[], keys: number[], ticks: number) => {
 };
 
 // One hand has one voice here: a note held under a faster melody ends where the next note starts
-function handEvents(notes: { tick: number; length: number; midi: number }[], hold: number) {
+function handEvents(notes: { tick: number; length: number; midi: number; unsure?: boolean }[], hold: number, unsure: string[]) {
   const starts = [...new Set(notes.map(n => n.tick))].sort((a, b) => a - b);
   const events: Ev[] = [];
   let now = 0;
@@ -346,7 +346,9 @@ function handEvents(notes: { tick: number; length: number; midi: number }[], hol
     const held = Math.max(...chord.map(n => n.length));
     // Bars stop just short of the next one: a gap that small is no rest
     const length = next - tick - held <= hold ? next - tick : held;
+    const first = events.length;
     emit(events, [...new Set(chord.map(n => n.midi))].sort((a, b) => a - b), length);
+    if (chord.some(n => n.unsure)) unsure.push(events[first].id);
     now = tick + length;
   });
   return events;
@@ -355,13 +357,13 @@ function handEvents(notes: { tick: number; length: number; midi: number }[], hol
 export interface Reading {
   bpm: number;
   sure: boolean; // the notes fit a steady beat
-  piece: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>;
+  piece: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands' | 'source'>;
   placed: { midi: number; hand: Hand; tick: number; start: number }[]; // each note, written and heard
 }
 
 // From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
 // import page: an octave for short keyboards, and half or double when the beat was misjudged.
-export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter }: { octave?: number; tempoFactor?: number; meter?: Meter } = {}): Reading {
+export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter, lag = 0 }: { octave?: number; tempoFactor?: number; meter?: Meter; lag?: number } = {}): Reading {
   const times = [...new Set(notes.map(n => n.start))].sort((a, b) => a - b);
   // A chord: every note of it takes the time of its first
   const together = (span: number) => times.filter((t, i) => i === 0 || t - times[i - 1] > span);
@@ -402,6 +404,7 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
       midi: note.midi + octave * 12,
       hand: note.hand,
       start: note.start,
+      unsure: note.unsure,
       tick,
       // A bar looks a little shorter than the note it stands for, so its end is rounded up
       length: Math.max(GRID, snap(tickAt(note.end) + 0.3 * GRID) - tick),
@@ -425,16 +428,26 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
   // Played music is mostly held with the pedal: a chord lasts until the next one
   const hold = pulse ? GRID * 3 : GRID;
 
+  const unsure: string[] = [];
+  const hands = {
+    right: handEvents(moved.filter(n => n.hand === 'right'), hold, unsure),
+    left: handEvents(moved.filter(n => n.hand === 'left'), hold, unsure),
+  };
+  // Bars pass the row before they sound, so the moments are `lag` later in the recording
+  const heardAt = new Map<number, number>();
+  for (const { tick, start } of [...moved].sort((a, b) => a.start - b.start)) {
+    if (!heardAt.has(tick)) heardAt.set(tick, Number((start + lag).toFixed(2)));
+  }
+  const inOrder = [...heardAt].sort((a, b) => a[0] - b[0]);
+  const hearing = inOrder.filter(([, seconds], i) => inOrder.slice(Math.max(0, i - 8), i).every(before => before[1] < seconds));
+
   return {
     bpm,
     sure: tempo.sure,
     placed: moved.map(({ midi, hand, tick, start }) => ({ midi, hand, tick, start })),
     piece: {
-      beats, beatValue, key, bpm: Math.round(bpm),
-      hands: {
-        right: handEvents(moved.filter(n => n.hand === 'right'), hold),
-        left: handEvents(moved.filter(n => n.hand === 'left'), hold),
-      },
+      beats, beatValue, key, bpm: Math.round(bpm), hands,
+      source: { moments: hearing, unsure },
     },
   };
 }
