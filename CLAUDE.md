@@ -90,13 +90,20 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     Limits in seconds, not frames: browsers deliver other frame rates than a 30 fps test.
     Note times come from `passed`: when the lane crossed half of the bar's brightness, between two
     pictures. Where a limit is crossed depends on the bar, and that broke the count of a whole piece.
-    Hands by hue only (two shades per hand are common), one colour = split at middle C.
-  - `rhythm.ts`: `findTempo` tells machine-made tutorials (notes within `EXACT`) from played music,
-    for which `findPulse` (autocorrelation) gives the beat. **Both are counted by `trackBeats`, the
-    best chain of beats through the whole piece,** with four sixteenths to each beat, far stiffer
-    for machine-made pieces. Never count on from note to note: milliseconds of uneven note starts
-    lost an eighth in the middle of a piece, and every bar line after it. Rolled chords are
-    grouped, short chords held to the next. One voice per hand. **Bars come from the bass**
+    Hands by hue only (two shades per hand are common).
+  - `hands.ts`: one colour for both hands: `handLine`, a line that moves with the music between the
+    two groups of notes, moves as little as it can and asks no hand to stretch too far. A fixed
+    split at middle C is wrong for one note in five, because left-hand chords reach above it; the
+    line for one in 25, measured against the hand colours of the second recording.
+  - `rhythm.ts`: **machine-made pieces get one grid for all of it** (`findGrid`, `stepsOnGrid`):
+    `gridFit` says how tightly note starts sit on a grid, independent of the picture rate (19 pictures
+    a second still give exactly 130 BPM and no note off). Each note finds its step by itself; only
+    many notes missing on one side in a row mean a new tempo. Never count on from note to note: a
+    few milliseconds lost an eighth and every bar line after it. A chain of beats doesn't do
+    for such pieces either: over running eighths it slides to the other eighth and pays little
+    for it. **Played music** has `findPulse` (autocorrelation) and `trackBeats`, the best chain of
+    beats through the whole piece, four sixteenths to each beat. Rolled chords are grouped, short
+    chords held to the next. One voice per hand. **Bars come from the bass**
     (`bassPlace`): the lowest note of a stretch one bar long keeps falling on the same place, the
     one. That tells 12 from 16 sixteenths by far (8.9 against 3.5 times chance, 12.3 against 4) and
     where bars start. 3/4 or 6/8 can't be told from the notes, so it goes by tempo, and the import
@@ -176,7 +183,7 @@ from real Chrome replay the tracker in seconds instead of minutes.
   download server is against YouTube's terms and fragile.
 - The reading writes sixteenths at the finest and one voice per hand. Missing: triplets, held notes
   under a melody. Tidier note values for played music.
-- Below about 25 pictures a second the tempo reading tips over (19 a second: 68 instead of 130 BPM,
-  though nearly all notes are found). `ENOUGH` slows the video down before that.
+- At 11 pictures a second the tempo reading of machine-made pieces still fails (19 are fine).
+  `ENOUGH` slows the video down well before that.
 - Not yet: slurs, dynamics, pedal, repeat signs, PNG/PDF export (the old site had PNG), keyboard
   shortcuts on the PC, installing as an app (manifest, icons, service worker).

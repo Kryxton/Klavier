@@ -13,7 +13,11 @@ const DRIFT = 0.15; // how far it may wander
 const CHORD = 0.06; // seconds; notes this close were meant together
 const BIN = 0.01; // seconds, for following played music
 const BEAT_STIFFNESS = 30; // how strongly beats keep to the pulse
-const EXACT_STIFFNESS = 300; // and in a machine-made piece, which only changes tempo on purpose
+const GRID_SEARCH = 0.07; // how far off the first idea of the tempo may be
+const GRID_TRIES = 2000;
+const GRID_ORDER = 0.75; // how tightly note starts have to sit on a grid: 1 is perfect, played music gets far below
+const RETUNE = 6; // notes in a row off the grid on one side: the tempo has changed on purpose
+const UNEVEN_TIMES = 2.5; // off the grid means this many times further than notes usually are
 const TEMPO_WINDOW = 16; // beats over which the tempo is read
 const PULSE_MIN = 0.3; // seconds between beats
 const PULSE_MAX = 2;
@@ -90,7 +94,7 @@ function findPulse(curve: Float64Array) {
 // The best chain of beats through the whole piece: each beat wants to sit on note starts and about
 // one pulse after the one before. Seen as a whole, one early chord can't throw the count off, which
 // counting note by note can't avoid.
-function trackBeats(curve: Float64Array, bpm: number, stiffness: number) {
+function trackBeats(curve: Float64Array, bpm: number) {
   const period = 60 / bpm / BIN;
   const mean = curve.reduce((sum, value) => sum + value, 0) / curve.length || 1;
   const score = new Float64Array(curve.length);
@@ -99,7 +103,7 @@ function trackBeats(curve: Float64Array, bpm: number, stiffness: number) {
     let best = 0;
     for (let p = Math.max(0, t - Math.round(period * 1.4)); p <= t - Math.round(period * 0.7); p++) {
       const stretch = Math.log((t - p) / period);
-      const value = score[p] - stiffness * mean * stretch * stretch;
+      const value = score[p] - BEAT_STIFFNESS * mean * stretch * stretch;
       if (value > best) {
         best = value;
         previous[t] = p;
@@ -127,6 +131,82 @@ function stepsAlong(onsets: number[], beats: number[], period: number) {
     return beat * 4 + Math.round((4 * (at - from)) / span);
   });
   return steps.map(step => step - steps[0]);
+}
+
+// How tightly note starts sit on a grid of `step` seconds: 1 is perfect, 0 no relation at all.
+// Each start counts as a direction on a circle one step around; on a grid they all point alike.
+function gridFit(onsets: number[], step: number) {
+  let x = 0;
+  let y = 0;
+  for (const time of onsets) {
+    const angle = (2 * Math.PI * time) / step;
+    x += Math.cos(angle);
+    y += Math.sin(angle);
+  }
+  return { order: Math.hypot(x, y) / onsets.length, offset: (Math.atan2(y, x) / (2 * Math.PI)) * step };
+}
+
+// The exact length of a sixteenth, near `around`
+function fineStep(onsets: number[], around: number) {
+  let best = { step: around, order: 0 };
+  for (let i = -GRID_TRIES; i <= GRID_TRIES; i++) {
+    const step = around * (1 + (GRID_SEARCH * i) / GRID_TRIES);
+    const { order } = gridFit(onsets, step);
+    if (order > best.order) best = { step, order };
+  }
+  return best;
+}
+
+// A machine-made piece on one grid for all of it: each note finds its step by itself, so one note a
+// few milliseconds off costs nothing, while counting from note to note it can cost an eighth and
+// every bar line after it. Only when notes keep missing on one side has the tempo really changed.
+function stepsOnGrid(onsets: number[], sixteenth: number) {
+  // All notes say where the grid lies: the first one alone may be off itself
+  const { offset } = gridFit(onsets, sixteenth);
+  const start = offset + Math.round((onsets[0] - offset) / sixteenth) * sixteenth;
+  // Fewer pictures make note starts more uneven, and that alone is no change of tempo
+  const uneven = onsets.reduce((sum, time) => {
+    const place = (time - start) / sixteenth;
+    return sum + Math.abs(place - Math.round(place)) * sixteenth;
+  }, 0) / onsets.length;
+  const offGrid = Math.max(sixteenth / 4, UNEVEN_TIMES * uneven);
+  let step = sixteenth;
+  let anchor = start;
+  let base = 0;
+  let missing: { time: number; count: number; miss: number }[] = [];
+  return onsets.map(time => {
+    const count = base + Math.round((time - anchor) / step);
+    const miss = time - anchor - (count - base) * step;
+    if (Math.abs(miss) > offGrid && (!missing.length || miss * missing[0].miss > 0)) missing.push({ time, count, miss });
+    else missing = [];
+    if (missing.length >= RETUNE) {
+      const first = missing[0];
+      if (count > first.count) step = (time - first.time) / (count - first.count);
+      anchor = time;
+      base = count;
+      missing = [];
+    }
+    return count;
+  });
+}
+
+// The grid of a machine-made piece, or null. `bpm` may be a good way off or at half or double the
+// tempo: the plainest note values decide.
+function findGrid(onsets: number[], bpm: number) {
+  const fits: { step: number; steps: number[]; plain: number }[] = [];
+  for (const factor of [0.5, 1, 2]) {
+    // Uneven pictures blur a fine grid sooner than a coarse one, and half of a grid that holds is one
+    const coarser = fits[fits.length - 1];
+    const fit = coarser ? { step: coarser.step / 2, order: 1 } : fineStep(onsets, 15 / (bpm * factor));
+    if (fit.order < GRID_ORDER) continue;
+    const steps = stepsOnGrid(onsets, fit.step);
+    // How plain the note values are is read from the coarse grid: the fine one is more easily
+    // thrown by uneven pictures, and notes on the coarse grid are at home on the fine one
+    const tempo = 15 / fit.step;
+    const plain = plainness(coarser ? coarser.steps.map(s => s * 2) : steps) - 0.15 * Math.abs(Math.log2(tempo / 100));
+    fits.push({ step: fit.step, steps, plain });
+  }
+  return fits.length ? fits.reduce((a, b) => (b.plain > a.plain ? b : a)) : null;
 }
 
 // The usual tempo along the beats: an ending that slows down isn't the tempo of the piece
@@ -290,16 +370,16 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
   const curve = exact.length < 8 ? null : startCurve(
     exact, exact.map((t, i) => notes.filter(n => n.start >= t && n.start < (exact[i + 1] ?? Infinity)).length),
   );
-  const pulse = curve && !steady.sure ? findPulse(curve) : null;
+  const firstPulse = curve ? findPulse(curve) : null;
+  const grid = firstPulse ? findGrid(exact, steady.bpm) ?? findGrid(exact, firstPulse) : null;
+  const pulse = grid ? null : firstPulse;
   // Played chords are often rolled: what is closer than half a sixteenth belongs together
   const onsets = pulse ? together((0.45 * 15) / pulse) : exact;
-  // Seen as a whole, even machine-made pieces: counting on from note to note, one note a few
-  // milliseconds off can cost an eighth, and every bar after it
-  const beatTimes = curve ? trackBeats(curve, pulse ?? steady.bpm, pulse ? BEAT_STIFFNESS : EXACT_STIFFNESS) : [];
-  const counted = beatTimes.length > 1 ? tempoAlong(beatTimes) : pulse;
-  const tempo = counted ? { ...steady, bpm: counted } : steady;
+  const beatTimes = curve && pulse ? trackBeats(curve, pulse) : [];
+  const counted = grid ? 15 / grid.step : beatTimes.length > 1 ? tempoAlong(beatTimes) : pulse;
+  const tempo = counted ? { ...steady, bpm: counted, sure: Boolean(grid) || (exact.length < 8 && steady.sure) } : steady;
   const bpm = tempo.bpm * tempoFactor;
-  const anchors = !onsets.length ? [] : curve ? stepsAlong(onsets, beatTimes, 60 / tempo.bpm) : follow(onsets, steady.start).steps;
+  const anchors = !onsets.length ? [] : grid ? grid.steps : curve ? stepsAlong(onsets, beatTimes, 60 / tempo.bpm) : follow(onsets, steady.start).steps;
   const scale = tempoFactor; // half the tempo: every note takes half as many steps
 
   // Seconds to ticks along the followed beat, between the note starts

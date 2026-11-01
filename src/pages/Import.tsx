@@ -5,7 +5,7 @@ import { BUTTON_RED, BUTTON_SOFT, Choice, LABEL, TEXT_BUTTON } from '../componen
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
 import { barTicks, handTicks } from '../utils/score';
-import { VideoError, readVideo } from '../video/readVideo';
+import { VideoError, readVideo, type Stage } from '../video/readVideo';
 import { writeDown, type Meter } from '../video/rhythm';
 import type { Hearing } from '../video/sound';
 import type { Detected } from '../video/tracker';
@@ -14,6 +14,7 @@ type Fields = Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>;
 const TEMPOS = [{ id: 0.5, label: 'Halb' }, { id: 1, label: 'Normal' }, { id: 2, label: 'Doppelt' }];
 const OCTAVES = [-2, -1, 0, 1, 2].map(id => ({ id, label: id > 0 ? `+${id}` : String(id) }));
 const METERS: { id: Meter; label: string }[] = [{ id: '4/4', label: '4/4' }, { id: '3/4', label: '3/4' }, { id: '6/8', label: '6/8' }];
+const STAGES: Record<Stage, string> = { keys: 'Klaviatur wird gesucht', bars: 'Balken werden gelesen', sound: 'Ton wird geprüft' };
 
 // A recording's own file name says nothing about the piece
 const titleFrom = (file: File) => {
@@ -23,6 +24,7 @@ const titleFrom = (file: File) => {
 
 export function Import({ first, onCreate, onCancel }: { first?: File | null; onCreate: (title: string, fields: Fields) => void; onCancel: () => void }) {
   const [progress, setProgress] = useState<number | null>(null);
+  const [stage, setStage] = useState<Stage>('keys');
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ notes: Detected[]; hearing: Hearing | null; fullKeyboard: boolean } | null>(null);
   const [title, setTitle] = useState('');
@@ -30,6 +32,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
   const [tempoFactor, setTempoFactor] = useState(1);
   const [meter, setMeter] = useState<Meter | undefined>();
   const input = useRef<HTMLInputElement>(null);
+  const running = useRef<AbortController | null>(null);
 
   const reading = useMemo(() => (result ? writeDown(result.notes, { octave, tempoFactor, meter }) : null), [result, octave, tempoFactor, meter]);
 
@@ -39,12 +42,19 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
     setResult(null);
     setProgress(0);
     setMeter(undefined);
+    setStage('keys');
     setTitle(titleFrom(file));
+    running.current = new AbortController();
     try {
       // Whole percents only: redrawing the keys for every picture would slow the reading down
-      setResult(await readVideo(file, share => setProgress(Math.floor(share * 100) / 100)));
+      setResult(await readVideo(file, (share, now) => {
+        setProgress(Math.floor(share * 100) / 100);
+        setStage(now);
+      }, running.current.signal));
     } catch (problem) {
-      setError(problem instanceof VideoError ? problem.message : 'Beim Lesen des Videos ist etwas schiefgegangen.');
+      if ((problem as Error).name !== 'AbortError') {
+        setError(problem instanceof VideoError ? problem.message : 'Beim Lesen des Videos ist etwas schiefgegangen.');
+      }
     }
     setProgress(null);
   };
@@ -60,12 +70,13 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
     const lit = new Set(Array.from({ length: high - 20 }, (_, i) => 21 + i));
     return (
       <Screen>
-        <h1 className="text-[28px] font-bold tracking-tight">Noten werden gelesen</h1>
-        <p className="mt-2 text-dim">Das dauert so lange wie das Video. Lass die Seite dabei offen.</p>
+        <h1 className="text-[28px] font-bold tracking-tight">{STAGES[stage]}</h1>
+        <p className="mt-2 text-dim">Das dauert etwa so lange wie das Video. Lass die Seite dabei sichtbar: In einem anderen Tab wartet das Lesen.</p>
         <div className="mt-8 overflow-hidden rounded-xl border border-line bg-card">
           <Keyboard fit active={lit} className="h-24" />
         </div>
         <p className="mt-4 text-center text-[28px] font-semibold tabular-nums" aria-live="polite">{Math.round(progress * 100)} %</p>
+        <button type="button" onClick={() => running.current?.abort()} className={cn(TEXT_BUTTON, 'mx-auto mt-4 block')}>Abbrechen</button>
       </Screen>
     );
   }

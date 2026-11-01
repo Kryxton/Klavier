@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isBlack, keyPosition } from '../utils/notes';
 import { eventTicks } from '../utils/score';
+import { handLine } from './hands';
 import { findKeyboard, type Frame } from './keyboard';
 import { findKey, findTempo, writeDown } from './rhythm';
 import { Tracker, type Detected } from './tracker';
@@ -284,6 +285,26 @@ describe('Tracker', () => {
     expect(Math.abs(start(72) - start(84))).toBeLessThan(0.3 / 30);
   });
 
+  it('moves the line between the hands above a broken chord reaching over middle C', () => {
+    const bars = Array.from({ length: 16 }, (_, bar) => bar);
+    const notes = bars.flatMap(bar => [
+      ...[50, 57, 62, 57].map((midi, i) => ({ midi, start: bar * 0.8 + i * 0.2 })),
+      { midi: 83, start: bar * 0.8 },
+      { midi: 81, start: bar * 0.8 + 0.6 },
+    ]);
+    const line = handLine(notes);
+    const places = bars.slice(2, 14).map(bar => line(bar * 0.8));
+    expect(Math.min(...places)).toBeGreaterThan(62);
+    expect(Math.max(...places)).toBeLessThanOrEqual(81);
+  });
+
+  it('keeps the line at middle C when nothing asks for more', () => {
+    const notes = [48, 52, 55, 72, 76, 79].map(midi => ({ midi, start: 1 }));
+    expect(handLine(notes)(1)).toBeGreaterThan(55);
+    expect(handLine(notes)(1)).toBeLessThanOrEqual(72);
+    expect(handLine([])(5)).toBe(60);
+  });
+
   it('splits at middle C when the video has one colour', () => {
     const notes = track([
       { midi: 72, start: 0.5, end: 1, color: GREEN },
@@ -449,6 +470,34 @@ describe('writeDown', () => {
     const { piece } = writeDown(brokenChords(240, 60 / 130 / 2), { meter: '4/4' });
     expect([piece.beats, piece.beatValue]).toEqual([4, 4]);
     expect(writeDown(brokenChords(240, 60 / 130 / 2), { meter: '3/4' }).piece.beats).toBe(3);
+  });
+
+  it('keeps tempo and count when few pictures make the note starts very uneven', () => {
+    let seed = 5;
+    const jitter = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed / 2147483647 - 0.5) * 0.09; // up to 45 ms: about 11 pictures a second
+    };
+    const eighth = 60 / 130 / 2;
+    const notes = Array.from({ length: 500 }, (_, i) => {
+      const start = 2 + i * eighth + jitter();
+      return note(60 + [0, 4, 7, 12, 7, 4][i % 6], start, start + eighth * 0.85);
+    });
+    const { placed, sure, bpm } = writeDown(notes);
+    expect(sure).toBe(true);
+    expect(bpm).toBeCloseTo(130, 0);
+    const first = [...placed].sort((a, b) => a.start - b.start);
+    const wrong = first.filter((p, i) => p.tick - first[0].tick !== i * 24);
+    expect(wrong.length).toBeLessThan(10);
+  });
+
+  it('follows a machine-made piece into a new tempo', () => {
+    const before = Array.from({ length: 200 }, (_, i) => 2 + i * 0.25);
+    const after = Array.from({ length: 80 }, (_, i) => 2 + 200 * 0.25 + i * 0.3);
+    const notes = [...before, ...after].map(start => note(60 + Math.round(start * 4) % 12, start, start + 0.2));
+    const first = [...writeDown(notes).placed].sort((a, b) => a.start - b.start);
+    const gaps = first.slice(190).map((p, i, all) => (i ? p.tick - all[i - 1].tick : 24));
+    expect(gaps.filter(gap => gap !== 24).length).toBeLessThan(8);
   });
 
   it('survives an empty list', () => {

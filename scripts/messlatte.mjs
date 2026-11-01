@@ -8,7 +8,7 @@
 //   step, offset: the grid of a machine-made piece, seconds per eighth and where it starts
 //   from, to: the stretch where it runs on that grid
 //   pattern: eighths after which it repeats, which lets holes be counted without an original
-//   takte: the time signature it has to come out in
+//   farben: true if its bars tell the hands by colour, which makes it a test for telling them without
 // `.messung/grenzen.json` holds the limits; `node scripts/messlatte.mjs --merken` writes today's values.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -19,9 +19,9 @@ const ROOT = resolve(import.meta.dirname, '..');
 const DATA = join(ROOT, '.messung');
 const bundle = join(DATA, 'lesen.mjs');
 const entry = join(DATA, 'lesen-eintrag.ts');
-writeFileSync(entry, ['tracker', 'sound', 'rhythm'].map(name => `export * from '${join(ROOT, 'src/video', name).replaceAll('\\', '/')}';`).join('\n'));
+writeFileSync(entry, ['tracker', 'sound', 'rhythm', 'hands'].map(name => `export * from '${join(ROOT, 'src/video', name).replaceAll('\\', '/')}';`).join('\n'));
 execFileSync(process.execPath, [join(ROOT, 'node_modules/esbuild/bin/esbuild'), entry, '--bundle', '--platform=node', '--format=esm', `--outfile=${bundle}`, '--log-level=warning'], { stdio: 'inherit' });
-const { Tracker, judge, writeDown, findKey } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
+const { Tracker, judge, writeDown, findKey, handLine } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
 
 const LEN = { w: 192, h: 96, q: 48, 8: 24, 16: 12, 32: 6 };
 const ticksOf = e => LEN[e.dur] * (e.dotted ? 1.5 : 1);
@@ -176,6 +176,12 @@ for (const name of readdirSync(DATA, { withFileTypes: true }).filter(d => d.isDi
     });
     if (process.argv.includes('--liste')) console.log('  Löcher:', hole.list.join(', '));
   }
+  if (truth.farben) {
+    // The colours tell the hands: how far does the height alone get?
+    const line = handLine(final);
+    const wrong = final.filter(n => (n.midi >= line(n.start) ? 'right' : 'left') !== n.hand).length;
+    result.handFehlerOhneFarbe = Number(((100 * wrong) / final.length).toFixed(1));
+  }
   const fit = barFit(reading, ((reading.piece.beats * 192) / reading.piece.beatValue) / 12);
   result.basswechselAufDerEins = fit.all ? Math.round((100 * fit.on) / fit.all) : null;
   results[name] = result;
@@ -191,7 +197,7 @@ if (every > 1) {
 } else if (existsSync(limitsFile)) {
   const limits = JSON.parse(readFileSync(limitsFile, 'utf8'));
   // What may only go down, and what may only go up
-  const worseIfHigher = ['fremd', 'loecher', 'verschmolzen', 'daneben', 'rasterstufen'];
+  const worseIfHigher = ['fremd', 'loecher', 'verschmolzen', 'daneben', 'rasterstufen', 'handFehlerOhneFarbe'];
   const worseIfLower = ['bestaetigt', 'gefunden', 'basswechselAufDerEins'];
   const problems = [];
   for (const [name, result] of Object.entries(results)) {

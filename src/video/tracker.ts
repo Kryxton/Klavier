@@ -1,5 +1,6 @@
 import type { Hand } from '../types';
 import { isBlack } from '../utils/notes';
+import { handLine } from './hands';
 import type { Frame, KeyMap } from './keyboard';
 
 export interface Detected {
@@ -91,22 +92,30 @@ function twoHues(hues: number[]) {
   return { a, b };
 }
 
-// Which hand a note belongs to: by colour where the video has two, else by height
-function assignHands(notes: (Omit<Detected, 'hand'> & { hue: number | null })[]): Detected[] {
-  const bySplit = (midi: number): Hand => (midi >= 60 ? 'right' : 'left');
-  const hues = notes.flatMap(n => (n.hue === null ? [] : [n.hue]));
-  if (hues.length < 2) return notes.map(({ hue: _, ...n }) => ({ ...n, hand: bySplit(n.midi) }));
+type Coloured = Omit<Detected, 'hand'> & { hue: number | null };
 
-  const { a, b } = twoHues(hues);
-  if (hueGap(a, b) < 25) return notes.map(({ hue: _, ...n }) => ({ ...n, hand: bySplit(n.midi) }));
+// Which hand a note belongs to: by colour where the video has two, else by height. `others` are
+// notes that don't decide but should come out the same way.
+function assignHands(notes: Coloured[], others: Coloured[] = []): Detected[][] {
+  const everything = [...notes, ...others];
+  const hues = notes.flatMap(n => (n.hue === null ? [] : [n.hue]));
+  const { a, b } = hues.length < 2 ? { a: 0, b: 0 } : twoHues(hues);
+  const line = hueGap(a, b) < 25 ? handLine(notes) : () => 60;
+  const bySplit = ({ midi, start }: Coloured): Hand => (midi >= line(start) ? 'right' : 'left');
+  if (hueGap(a, b) < 25) {
+    return [notes, others].map(list => list.map(n => {
+      const { hue: _, ...note } = n;
+      return { ...note, hand: bySplit(n) };
+    }));
+  }
 
   const inA = (hue: number) => hueGap(hue, a) <= hueGap(hue, b);
   const pitch = (group: typeof notes) => group.reduce((s, n) => s + n.midi, 0) / Math.max(1, group.length);
-  const coloured = notes.filter(n => n.hue !== null);
+  const coloured = everything.filter(n => n.hue !== null);
   const aIsRight = pitch(coloured.filter(n => inA(n.hue as number))) >= pitch(coloured.filter(n => !inA(n.hue as number)));
-  return notes.map(({ hue, ...n }) => ({
-    ...n,
-    hand: hue === null ? bySplit(n.midi) : inA(hue) === aIsRight ? 'right' : 'left',
+  return [notes, others].map(list => list.map(n => {
+    const { hue, ...note } = n;
+    return { ...note, hand: hue === null ? bySplit(n) : inA(hue) === aIsRight ? 'right' as const : 'left' as const };
   }));
 }
 
@@ -433,8 +442,8 @@ export class Tracker {
     };
     const unclaimed = rough.filter(free);
     const shade = this.secondShade(unclaimed);
-    const all = assignHands([...whole, ...shade.map(noteOf)]).sort((a, b) => a.start - b.start || a.midi - b.midi);
-    this.doubtful = assignHands(unclaimed.filter(f => !shade.includes(f)).map(noteOf));
-    return all;
+    const [all, doubtful] = assignHands([...whole, ...shade.map(noteOf)], unclaimed.filter(f => !shade.includes(f)).map(noteOf));
+    this.doubtful = doubtful;
+    return all.sort((a, b) => a.start - b.start || a.midi - b.midi);
   }
 }

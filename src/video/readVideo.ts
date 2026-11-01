@@ -22,6 +22,13 @@ const HOLE_SHARE = 0.05;
 
 export class VideoError extends Error {}
 
+export type Stage = 'keys' | 'bars' | 'sound';
+type Progress = (share: number, stage: Stage) => void;
+
+const stoppedIf = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw new DOMException('Abgebrochen', 'AbortError');
+};
+
 const once = (target: EventTarget, event: string) =>
   new Promise<void>(resolve => target.addEventListener(event, () => resolve(), { once: true }));
 
@@ -34,8 +41,9 @@ async function seek(video: HTMLVideoElement, time: number) {
 }
 
 // Plays from where it stands, calling `frame` for every picture shown, until the end, until `frame`
-// returns true, or until nothing moves any more. The 'ended' event alone isn't reliable.
-async function playThrough(video: HTMLVideoElement, speed: number, frame: (time: number) => boolean | void) {
+// returns true, or until nothing moves any more. The 'ended' event alone isn't reliable. In a hidden
+// tab no pictures arrive, so it waits there: notes played meanwhile would be gone without a trace.
+async function playThrough(video: HTMLVideoElement, speed: number, frame: (time: number) => boolean | void, signal?: AbortSignal) {
   let stop = false;
   const onFrame: VideoFrameRequestCallback = (_, data) => {
     if (stop) return;
@@ -45,18 +53,24 @@ async function playThrough(video: HTMLVideoElement, speed: number, frame: (time:
   video.requestVideoFrameCallback(onFrame);
   video.playbackRate = speed;
   void video.play().catch(() => { stop = true; });
+  const onVisibility = () => {
+    if (document.hidden) video.pause();
+    else void video.play().catch(() => { stop = true; });
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   await new Promise<void>(resolve => {
     let last = -1;
     let still = 0;
     const timer = setInterval(() => {
-      still = video.currentTime === last ? still + 1 : 0;
+      still = video.currentTime === last && !document.hidden ? still + 1 : 0;
       last = video.currentTime;
-      if (stop || video.ended || still * WATCH_MS >= STALL_MS) {
+      if (stop || signal?.aborted || video.ended || still * WATCH_MS >= STALL_MS) {
         clearInterval(timer);
         resolve();
       }
     }, WATCH_MS);
   });
+  document.removeEventListener('visibilitychange', onVisibility);
   stop = true;
   video.pause();
 }
@@ -94,7 +108,7 @@ function canvasFor(video: HTMLVideoElement, rows?: number) {
 }
 
 // A quick run through the video, looking at a few pictures for the keyboard
-async function lookForKeys(file: File, speed: number, progress: (share: number) => void) {
+async function lookForKeys(file: File, speed: number, progress: Progress, signal?: AbortSignal) {
   const video = await open(file);
   try {
     const { canvas, ctx } = canvasFor(video);
@@ -103,7 +117,7 @@ async function lookForKeys(file: File, speed: number, progress: (share: number) 
     let full = 0;
     let map: KeyMap | null = null;
     await playThrough(video, speed, time => {
-      progress(SCOUT_SHARE * Math.min(1, time / (video.duration || 1)));
+      progress(SCOUT_SHARE * Math.min(1, time / (video.duration || 1)), 'keys');
       if (time < next) return false;
       next += every;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -113,7 +127,8 @@ async function lookForKeys(file: File, speed: number, progress: (share: number) 
       if (found && (!map || found.keys.length > map.keys.length || (found.keys.length === map.keys.length && found.keyTop < map.keyTop))) map = found;
       if (found?.fullKeyboard) full++;
       return full >= CERTAIN;
-    });
+    }, signal);
+    stoppedIf(signal);
     return map as KeyMap | null;
   } finally {
     close(video);
@@ -121,18 +136,36 @@ async function lookForKeys(file: File, speed: number, progress: (share: number) 
 }
 
 // At high speed a busy browser may show too few pictures to see the keyboard in
-async function findKeys(file: File, progress: (share: number) => void) {
+async function findKeys(file: File, progress: Progress, signal?: AbortSignal) {
   for (const speed of SCOUT_SPEEDS) {
-    const map = await lookForKeys(file, speed, progress);
+    const map = await lookForKeys(file, speed, progress, signal);
     if (map) return map;
   }
   return null;
 }
 
-export async function readVideo(file: File, progress: (share: number) => void) {
-  const map = await findKeys(file, progress);
+// A sleeping screen ends the reading on phones and tablets
+const stayAwake = async () => {
+  try {
+    return await navigator.wakeLock.request('screen');
+  } catch {
+    return null;
+  }
+};
+
+export async function readVideo(file: File, progress: Progress, signal?: AbortSignal) {
+  const awake = await stayAwake();
+  try {
+    return await read(file, progress, signal);
+  } finally {
+    void awake?.release();
+  }
+}
+
+async function read(file: File, progress: Progress, signal?: AbortSignal) {
+  const map = await findKeys(file, progress, signal);
   if (!map) throw new VideoError('In diesem Video habe ich keine Klaviatur gefunden.');
-  progress(SCOUT_SHARE);
+  progress(SCOUT_SHARE, 'bars');
 
   const video = await open(file);
   try {
@@ -159,8 +192,9 @@ export async function readVideo(file: File, progress: (share: number) => void) {
         if ((seen.length - since) / (time - seen[since]) < ENOUGH) video.playbackRate = Math.max(SLOWEST, video.playbackRate * 0.75);
         since = seen.length - 1;
       }
-      progress(SCOUT_SHARE + PLAY_SHARE * Math.min(1, time / (video.duration || 1)));
-    });
+      progress(SCOUT_SHARE + PLAY_SHARE * Math.min(1, time / (video.duration || 1)), 'bars');
+    }, signal);
+    stoppedIf(signal);
 
     // Playing skips pictures when the device is busy or the tab is in the background. A skipped
     // note would be missing, so holes are read picture by picture, as long as the browser answers.
@@ -174,7 +208,7 @@ export async function readVideo(file: File, progress: (share: number) => void) {
         if (performance.now() > until || !(await seek(video, time))) break reading;
         read(time);
         done += STEP;
-        progress(SCOUT_SHARE + PLAY_SHARE + HOLE_SHARE * Math.min(1, done / missing));
+        progress(SCOUT_SHARE + PLAY_SHARE + HOLE_SHARE * Math.min(1, done / missing), 'bars');
       }
     }
     const notes: Detected[] = tracker.finish();
@@ -182,9 +216,13 @@ export async function readVideo(file: File, progress: (share: number) => void) {
 
     // The sound is the second opinion; without one the picture stands alone
     const soundFrom = SCOUT_SHARE + PLAY_SHARE + HOLE_SHARE;
-    progress(soundFrom);
+    progress(soundFrom, 'sound');
     const samples = await soundOf(file);
-    const checked = samples && await judge(notes, tracker.doubtful, samples, share => progress(soundFrom + (1 - soundFrom) * share));
+    stoppedIf(signal);
+    const checked = samples && await judge(notes, tracker.doubtful, samples, share => {
+      stoppedIf(signal);
+      progress(soundFrom + (1 - soundFrom) * share, 'sound');
+    });
     return { notes: checked?.notes ?? notes, hearing: checked?.hearing ?? null, fullKeyboard: map.fullKeyboard };
   } finally {
     close(video);

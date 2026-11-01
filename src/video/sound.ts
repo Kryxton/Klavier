@@ -104,7 +104,7 @@ function bandsFor(rate: number, bins: number) {
 }
 
 // The sound as a picture, over time and frequency steps, with one look centred on each moment
-async function spectrogram(samples: Float32Array) {
+async function spectrogram(samples: Float32Array, progress: (share: number) => void) {
   const seconds = samples.length / RATE;
   const frames = Math.floor(seconds / HOP);
   const bins = (LAST_BIN - FIRST_KEY) * PER_KEY + 1;
@@ -119,7 +119,7 @@ async function spectrogram(samples: Float32Array) {
   const im = new Float64Array(SIZE);
   const power = new Float64Array(SIZE / 2 + 1);
   const spectrum = new Float32Array(frames * bins);
-  for (const { signal, rate, gain, first, last } of parts) {
+  for (const [part, { signal, rate, gain, first, last }] of parts.entries()) {
     const bands = bandsFor(rate, bins);
     for (let f = 0; f < frames; f++) {
       const start = Math.round(f * HOP * rate) - SIZE / 2;
@@ -142,7 +142,10 @@ async function spectrogram(samples: Float32Array) {
         }
         spectrum[f * bins + b] = value * gain;
       }
-      if (f % 1000 === 999) await breathe();
+      if (f % 1000 === 999) {
+        progress((part + f / frames) / parts.length);
+        await breathe();
+      }
     }
   }
   const top = spectrum.reduce((max, value) => (value > max ? value : max), 0) || 1;
@@ -241,7 +244,7 @@ function round({ spectrum, frames, bins }: Sound, templates: Templates, shares: 
 
 // The picture says when each key is played; those moments show what the keys of this recording
 // really sound like
-async function learnTemplates(sound: Sound, notes: Detected[], lag: number) {
+async function learnTemplates(sound: Sound, notes: Detected[], lag: number, progress: (share: number) => void) {
   const { frames, bins } = sound;
   const templates = startingTemplates(bins);
   const shares = new Float32Array(frames * KEYS);
@@ -265,17 +268,19 @@ async function learnTemplates(sound: Sound, notes: Detected[], lag: number) {
       const sum = template.weights.reduce((a, w, i) => a + w * learned[k][i], 0) / total || 1;
       template.weights = template.weights.map((w, i) => (w * learned[k][i]) / total / sum);
     });
+    progress((r + 1) / LEARN_ROUNDS);
     await breathe();
   }
   return { templates, known: templates.map((_, k) => seen[k] > ENOUGH_LOOKS) };
 }
 
-async function splitIntoKeys(sound: Sound, templates: Templates) {
+async function splitIntoKeys(sound: Sound, templates: Templates, progress: (share: number) => void) {
   const { spectrum, frames } = sound;
   const mean = spectrum.reduce((a, b) => a + b, 0) / spectrum.length;
   const shares = new Float32Array(frames * KEYS).fill(mean / KEYS);
   for (let r = 0; r < SPLIT_ROUNDS; r++) {
     round(sound, templates, shares);
+    progress((r + 1) / SPLIT_ROUNDS);
     await breathe();
   }
   return shares;
@@ -288,14 +293,11 @@ async function splitIntoKeys(sound: Sound, templates: Templates) {
 // notes can't be heard out of a chord.
 export async function judge(notes: Detected[], doubtful: Detected[], samples: Float32Array, progress: (share: number) => void = () => {}): Promise<Checked | null> {
   if (notes.length < 8 || samples.length < SIZE) return null;
-  const sound = await spectrogram(samples);
-  progress(0.4);
+  const sound = await spectrogram(samples, share => progress(share * 0.4));
   const lag = findLag(sound, notes);
   if (lag === null) return null;
-  const { templates, known: heardBefore } = await learnTemplates(sound, notes, lag);
-  progress(0.7);
-  const shares = await splitIntoKeys(sound, templates);
-  progress(1);
+  const { templates, known: heardBefore } = await learnTemplates(sound, notes, lag, share => progress(0.4 + share * 0.3));
+  const shares = await splitIntoKeys(sound, templates, share => progress(0.7 + share * 0.3));
   const { frames } = sound;
 
   const at = (seconds: number) => Math.round((seconds + lag) / HOP);
