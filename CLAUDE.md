@@ -44,8 +44,19 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   hands move, a hand not copied gets rests), `replaceBars` (only the chosen hands), `removeBars`
   (one hand: rests). All go through `cutAt`, which splits notes across the cut.
 - `utils/player.ts`: `Player`, no React or audio inside, tested with a fake clock. Timers only wake
-  it up; notes are placed on the audio clock (`LOOKAHEAD`), so timing stays exact. `audio.ts` = Tone
-  (Salamander samples, synth until they have arrived), `usePlayer.ts` = the React side.
+  it up; notes are placed on the audio clock (`LOOKAHEAD`), so timing stays exact. `start(tick, countIn)`
+  counts a bar in (the picture stands still, clicks go over the audio clock too) and jumps when it
+  is already playing. `audio.ts` = Tone (Salamander samples, synth until they have arrived).
+  **Samples play through `ToneBufferSource`, not `Tone.Sampler`:** the Sampler can't take back a
+  release it was given, so held notes went on sounding after a pause. All notes of a run go through
+  one bus and `silence` drops it, which also reaches notes only planned so far. `usePlayer.ts` = the
+  React side.
+- `utils/pedal.ts`: the pedal, for the ear only (`withPedal` changes what the player hears, the
+  score, the falling notes and the highlights keep the written notes). `harmonies` finds the best
+  way through the chords over the whole piece with a price on every change (`CHANGE`, safe from 1.5
+  to 4 on the long piece, 6 swallows real changes). Only major, minor and dominant seventh: Am7
+  would hold Am and C alike. Notes foreign to the harmony keep their length: 58 semitone clashes on
+  the long piece instead of 260, and wrong notes from the reading don't ring on.
 - `components/Sheet.tsx`: VexFlow. `bars` marks whole bars and `onBar` makes a tap mean a bar: a layer
   of boxes above the lines, worked out from `measure`/`arrange`, so it needs no drawn line. Each line
   has `overflow: visible`, low notes reach into the next one.
@@ -55,18 +66,31 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   of blocking 500 and an edit redraws only those. Bar widths are estimated (`roomOf`, on the wide
   side), because asking VexFlow means building every note first. Ties over line ends are drawn as
   half ties from each side. Selected and sounding notes switch a class on just those notes. A tap
-  goes to the nearest note within `TAP_RADIUS`, because noteheads are small.
+  goes to the nearest note within `TAP_RADIUS`, because noteheads are small. `PrintSheet` is the
+  score for paper: its own layout for A4 whatever the screen is, drawn whole and at once when it
+  appears, because a browser prints what is there at that moment. It stays after printing (not
+  every browser has taken its picture when it says it is done), any change of the piece retires it.
+  `@page` margin 0 keeps the browser's date and address off, the sheets bring their own margins and
+  stop short of A4, because iPads may not give the whole sheet.
 - `components/Falling.tsx`: the falling notes, dark stage on the black lacquer of a piano, keys and
   bars in one canvas (no React per note, no drift between them). What doesn't move is drawn once
   into layers. Only notes in view are looked at (`soundsBetween`, also used by `usePlayer`). Slim bars
   (`WHITE_BAR`), keys never wider than `WIDEST_KEY`: wider screens show more keys, not fat ones.
   Colours are in the `@theme static` block: Tailwind drops tokens no class uses, and `addColorStop`
-  throws on an empty string.
+  throws on an empty string. Dragging moves the notes with the finger (down = onward), holds the
+  music and picks it up on letting go; a tap does nothing.
 - Pages: `Pieces` (home, list, backup file), `Import` (video to piece), `Write` = „Notenblatt“: the
   score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord; the
   button with note symbols shows what „Teilen“ makes of the note, on the last note it copies),
   „Takte“ = `components/BarTools.tsx`: tap the first and last bar, choose the hands, copy to where
-  it should begin or to the end; `Practice` (Noten, Fallend as the extra).
+  it should begin or to the end; `Practice` (Noten, Fallend as the extra): a tapped bar plays from
+  there, the loop button then two tapped bars set a loop (from Fallend it goes to the notes for
+  that and comes back), keeps the screen on (`utils/wakeLock.ts`).
+- Installed app: `public/sw.js` as in Life OS and Latein (starts from the cache, fetches the current
+  version behind it, `utils/update.ts` offers a reload), plus a cache of its own for the piano samples,
+  which lie on another address: without it the app would be silent offline. The icons are renders
+  of `scripts/icon.svg`. Each installed app on iOS has its own storage: pieces in Safari don't show
+  up there, they move by backup file.
 - `src/video/`: video to notes, runs on the device, no server.
   - `keyboard.ts`: finds the keys from the 2-3 pattern of the black keys (88 keys: octave certain;
     fewer: guessed, the import page corrects it). The top edge is found straight up from the black
@@ -142,8 +166,17 @@ Sound and VexFlow are mocked in `App.test.tsx`, so tests don't prove them; check
 Own server (`npx vite --port 5191 --strictPort`; it listens on `localhost`, not 127.0.0.1), own
 headless Chrome driven over the DevTools protocol (see Latein's CLAUDE.md), real mouse events, seed
 `klavier_pieces` in localStorage, look at screenshots at 320, 390 and 1024 px. Wait for
-`.vf-stavenote` before measuring. Stop the server afterwards (TaskStop leaves vite running).
+`.vf-stavenote` before measuring. Stop the server afterwards (TaskStop leaves vite running; netstat
+says ABHÖREN here, take `Get-NetTCPConnection` for the port).
 Long heredocs in the Bash tool break: write scripts to the scratchpad.
+**Sound can be measured:** patch `AudioNode.prototype.connect` before the page loads
+(`Page.addScriptToEvaluateOnNewDocument`) to tap what reaches the destination with an analyser; that
+also works on the live address. Compare with a note that should have stopped, not only with one
+that plays. Polling every 200 ms misses a click, poll in the page.
+**Printing:** `Page.printToPDF` with `preferCSSPageSize` makes the real PDF, pdf.js in the test Chrome
+turns its pages into pictures (`pdftoppm` is missing here). Measure speed on `vite preview`, the
+dev server is two to five times slower. Offline: stop the server and reload; for the samples start
+Chrome with `--host-resolver-rules=MAP tonejs.github.io 127.0.0.1:9`.
 
 ## Checking the video reading
 **Yardstick: `node scripts/messlatte.mjs`, 15 s, before every change to `src/video` goes out.** It runs
@@ -185,5 +218,4 @@ from real Chrome replay the tracker in seconds instead of minutes.
   under a melody. Tidier note values for played music.
 - At 11 pictures a second the tempo reading of machine-made pieces still fails (19 are fine).
   `ENOUGH` slows the video down well before that.
-- Not yet: slurs, dynamics, pedal, repeat signs, PNG/PDF export (the old site had PNG), keyboard
-  shortcuts on the PC, installing as an app (manifest, icons, service worker).
+- Not yet: slurs, dynamics, repeat signs, keyboard shortcuts on the PC, a pedal written in the score.
