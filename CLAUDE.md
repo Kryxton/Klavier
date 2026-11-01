@@ -68,13 +68,13 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   - `sound.ts`: **the picture proposes, the sound decides.** `soundOf` decodes the file's sound
     (no sound or unreadable = null, then the picture stands alone). `judge` finds the delay between
     bar and sound (0.36 s here), learns what each key sounds like from where the picture says it is
-    played, splits the sound into keys (non-negative factorisation, sparse templates, about 10 s on
+    played, splits the sound into keys (non-negative factorisation, sparse templates, 6 to 10 s on
     a PC) and then: adds doubtful bars that clearly sound, moves silent notes to the neighbour key
     that sounds, drops silent flickers. Only keys with a learned sound count (bass rumble looks
     like rarely used keys). Solid bars it can't hear stay: quiet inner notes can't be heard out.
     Blind test on the real recording: 62 % of notes made wrong repaired or removed, 81 % of hidden
-    notes found again, about 1 % of right notes changed; none of the 59 added notes is out of key,
-    of the doubtful ones 39 % are. So it is deliberately careful: it won't find every error.
+    notes found again, about 1 % of right notes changed; none of the 40 added notes is out of key,
+    though many of the 670 doubtful ones are. Deliberately careful: it won't find every error.
   - `readVideo.ts`: a fast run for the keyboard (8×, then 2× if that found nothing), then a fresh
     video element at speed 1, slower if fewer than `ENOUGH` pictures a second arrive. **No seeking
     in the main path:** Chrome on Windows stops answering after the first seek in iPhone recordings
