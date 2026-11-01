@@ -126,7 +126,12 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     few milliseconds lost an eighth and every bar line after it. A chain of beats doesn't do
     for such pieces either: over running eighths it slides to the other eighth and pays little
     for it. **Played music** has `findPulse` (autocorrelation) and `trackBeats`, the best chain of
-    beats through the whole piece, four sixteenths to each beat. Rolled chords are grouped, short
+    beats through the whole piece, four sixteenths to each beat. A beat is tied to the one before
+    it, not to one pulse for the piece: the pulse differed from run to run (62 to 70), and a chain
+    tied to it pushed in or dropped beats. A second pass knows its place in the bar (`bassCurve`:
+    new bass notes want to fall on the one): that took the same recording from 46 to 81 % of bass
+    changes on the one, in all runs alike. `countNotes` is cached per list of notes, because the
+    choices on the import page change only the writing. Rolled chords are grouped, short
     chords held to the next. One voice per hand. **Bars come from the bass**
     (`bassPlace`): the lowest note of a stretch one bar long keeps falling on the same place, the
     one. That tells 12 from 16 sixteenths by far (8.9 against 3.5 times chance, 12.3 against 4) and
@@ -144,6 +149,11 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     Blind test on the real recording: 62 % of notes made wrong repaired or removed, 81 % of hidden
     notes found again, about 1 % of right notes changed; none of the 40 added notes is out of key,
     though many of the 670 doubtful ones are. Deliberately careful: it won't find every error.
+  - `utils/recordings.ts`, `useRecording.ts`: the video's sound (16 bit, 11025 Hz, in IndexedDB by
+    piece id, about 2.5 MB; backups don't carry it) and `Piece.source`: `moments` (tick against
+    seconds, for the bars and the switch „Original“ under „Üben“, which plays the recording through
+    `Player.setRecording` from the same place, with loop and speed) and `unsure` (events where
+    picture and sound disagree, about 2 %: brown in correction mode, „Nächste“ and „Stimmt“).
   - `readVideo.ts`: a fast run for the keyboard (8×, then 2× if that found nothing), then a fresh
     video element at speed 1, slower if fewer than `ENOUGH` pictures a second arrive. **No seeking
     in the main path:** Chrome on Windows stops answering after the first seek in iPhone recordings
@@ -197,16 +207,19 @@ The user's recordings lie in the project folder; video files are gitignored and 
 this public repo. Cinnamon Girl (portrait, one bar colour, hands, smoke, played freely) and a
 landscape recording rotated by metadata (machine-exact, two hand colours, letters in the bars, dark
 bars on some black keys, 130 BPM, 1600 notes). Any change to the tracker must be checked on both.
+`.messung/` holds grossformat and three runs of the first recording (cinnamon, cinnamon2, cinnamon3):
+results differ from run to run, so a fix has to hold on all of them. `--jedes=2` or `=3` drops
+pictures, as a slow device does, and `--liste` names the holes. On the second recording the note
+names written in the bars show what is true: `ffmpeg` a crop of the bar and look.
 **To find missing notes without an original,** read a second row higher up: the same bars pass it
 later, so what only one row sees is a mistake (the second recording: 1590 of 1612 agree). Rows saved
 from real Chrome replay the tracker in seconds instead of minutes.
 **Speed:** check with a long piece and `Emulation.setCPUThrottlingRate` 4; a PC hides everything.
 
 ## Open
-- **Pitch is now checked by the sound, rhythm is still an estimate.** For played music the note
-  lengths and some starts are guesses: `H3:3 H3:1` patterns around the beat, chords falling apart,
-  the bar line can land two beats off from run to run. The sound isn't used for timing yet (its
-  long look is too blurred for that). Needs the user's ear, then more recordings.
+- **For played music note lengths and some starts are still guesses:** chords falling apart into
+  sixteenths, rolled octaves. The sound isn't used for timing yet (its long look is too blurred).
+  Bars and pitches are checked on two recordings only. Needs the user's ear, then more recordings.
 - Not tried in Safari on iPhone/iPad at all: neither the frame rate nor `decodeAudioData` on these
   files. Reading takes about the length of the video, plus 5 to 30 s for the sound. Only checked
   with a throttled CPU in Chrome: falling notes 60 fps, score while playing 47.
@@ -216,6 +229,14 @@ from real Chrome replay the tracker in seconds instead of minutes.
   download server is against YouTube's terms and fragile.
 - The reading writes sixteenths at the finest and one voice per hand. Missing: triplets, held notes
   under a melody. Tidier note values for played music.
+- **What is planned next, in this order (the user asked for all of it):** 1. two voices per hand
+  (`hands` has one list per hand; 60 of 218 long notes in Cinnamon Girl sound on while the hand plays
+  on and get cut; touches types, score, Sheet, edit, rhythm, so last and alone). 2. Decoding with
+  WebCodecs instead of playing (every picture, same result each run; needs an MP4 demuxer, HEVC is
+  reported as supported in Chrome, Safari unknown). 3. Tidier note values in played music.
+- The switch „Original“, the brown notes, cancelling and the live site were checked up to commit
+  903de64 on the branch `vergleich`; the beat chain with its place in the bar came after that and
+  is checked by the yardstick and tests, not yet with both recordings on the live address.
 - At 11 pictures a second the tempo reading of machine-made pieces still fails (19 are fine).
   `ENOUGH` slows the video down well before that.
 - Not yet: slurs, dynamics, repeat signs, keyboard shortcuts on the PC, a pedal written in the score.

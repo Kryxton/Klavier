@@ -508,6 +508,45 @@ describe('writeDown', () => {
     expect(doubted.map(e => e.keys)).toEqual([[63]]);
   });
 
+  // Played: the tempo sinks and rises, the bass moves on every fourth beat, and in the middle there
+  // are four thin bars where nothing but a long note marks the time
+  const playedPiece = () => {
+    let time = 1;
+    const notes: Detected[] = [];
+    const chords = [[43, 55, 62], [47, 59, 66], [40, 52, 59], [45, 57, 64]];
+    for (let bar = 0; bar < 40; bar++) {
+      const beat = 0.96 - 0.1 * Math.abs(Math.sin(bar / 6));
+      const chord = chords[bar % 4];
+      const thin = bar >= 20 && bar < 24;
+      for (let i = 0; i < 16; i++) {
+        const start = time + (i * beat) / 4 + 0.012 * Math.sin(i * 7 + bar);
+        if (i === 0) notes.push(note(chord[0], start, start + 0.2, 'left'));
+        if (!thin && i % 2 === 0) notes.push(note(chord[1 + (i / 2) % 2], start, start + 0.2, 'left'));
+        if (!thin && i % 4 === 2) notes.push(note(72 + (bar % 3), start, start + 0.3, 'right'));
+      }
+      time += 4 * beat;
+    }
+    return notes;
+  };
+
+  it('keeps bars on the bass through a thin passage in played music', () => {
+    const { placed, sure, piece } = writeDown(playedPiece());
+    expect(sure).toBe(false);
+    expect([piece.beats, piece.beatValue]).toEqual([4, 4]);
+    const lowest = [...placed].filter(p => [43, 47, 40, 45].includes(p.midi)).sort((a, b) => a.start - b.start);
+    const off = lowest.filter((p, i) => p.tick % 192 !== lowest[0].tick % 192 || (i && p.tick - lowest[i - 1].tick !== 192));
+    expect(off.length).toBeLessThan(3);
+  });
+
+  it('counts once for all the ways of writing the same notes down', () => {
+    const notes = playedPiece();
+    writeDown(notes);
+    const began = performance.now();
+    writeDown(notes, { tempoFactor: 2 });
+    writeDown(notes, { meter: '3/4' });
+    expect(performance.now() - began).toBeLessThan(150);
+  });
+
   it('survives an empty list', () => {
     expect(writeDown([]).piece.hands.right).toEqual([]);
   });

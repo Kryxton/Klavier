@@ -12,9 +12,16 @@ const FOLLOW = 0.08; // how fast the counted tempo follows the music
 const DRIFT = 0.15; // how far it may wander
 const CHORD = 0.06; // seconds; notes this close were meant together
 const BIN = 0.01; // seconds, for following played music
-const BEAT_STIFFNESS = 30; // how strongly beats keep to the pulse
+const BEAT_STIFFNESS = 250; // how strongly a beat keeps to the length of the one before
+const START_STIFFNESS = 10; // and the first one to the pulse
+const SHORTEST_BEAT = 0.7; // in pulses
+const LONGEST_BEAT = 1.4;
+const SPAN_CHANGE = 4; // the most a beat may differ from the one before, in steps of BIN
+const NO_BEAT = 127;
+const ON_THE_ONE = 3; // what a new bass note is worth on the one, in notes on a beat
+const OFF_THE_ONE = 1; // and what it costs anywhere else
 const GRID_SEARCH = 0.07; // how far off the first idea of the tempo may be
-const GRID_TRIES = 2000;
+const GRID_TRIES = 800;
 const GRID_ORDER = 0.75; // how tightly note starts have to sit on a grid: 1 is perfect, played music gets far below
 const RETUNE = 6; // notes in a row off the grid on one side: the tempo has changed on purpose
 const UNEVEN_TIMES = 2.5; // off the grid means this many times further than notes usually are
@@ -91,30 +98,101 @@ function findPulse(curve: Float64Array) {
   return bpm;
 }
 
-// The best chain of beats through the whole piece: each beat wants to sit on note starts and about
-// one pulse after the one before. Seen as a whole, one early chord can't throw the count off, which
-// counting note by note can't avoid.
-function trackBeats(curve: Float64Array, bpm: number) {
+// Where a new bass note comes in, as a curve like `startCurve`: harmony mostly changes on the one
+function bassCurve(notes: Detected[], origin: number, length: number, reach: number) {
+  const curve = new Float64Array(length);
+  const sorted = [...notes].sort((a, b) => a.start - b.start);
+  const lowest = (from: number, to: number) => {
+    let low = Infinity;
+    for (const { start, midi } of sorted) if (start >= from && start < to && midi < low) low = midi;
+    return low;
+  };
+  let last: number | null = null; // key of the note before the chord this one is in
+  let chordStart = -Infinity;
+  let current: number | null = null;
+  for (const { start, midi } of sorted) {
+    if (start - chordStart > CHORD) {
+      last = current;
+      chordStart = start;
+    }
+    current = midi;
+    // In a thin passage the note before may lie a long way back
+    const near = lowest(start - reach, start - CHORD);
+    const before = near === Infinity ? last : near;
+    if (before === null || midi !== lowest(start - CHORD, start + reach) || before % 12 === midi % 12) continue;
+    const at = Math.round((start - origin) / BIN);
+    for (let d = -6; d <= 6; d++) {
+      if (at + d >= 0 && at + d < length) curve[at + d] = Math.max(curve[at + d], Math.exp(-(d * d) / 18));
+    }
+  }
+  return curve;
+}
+
+// The best chain of beats through the whole piece, counted the way a musician counts: each beat
+// wants to sit on note starts and to last about as long as the one before. The tempo may wander far
+// over a piece, just not from one beat to the next, so a thin passage goes on at the tempo it is in.
+// With `bars` the chain also knows its place in the bar and expects new bass notes on the one: a
+// chain that only looks at beats comes out of a slow passage a beat off, and every bar with it.
+function trackBeats(curve: Float64Array, bpm: number, bars?: { bass: Float64Array; beats: number }) {
   const period = 60 / bpm / BIN;
-  const mean = curve.reduce((sum, value) => sum + value, 0) / curve.length || 1;
-  const score = new Float64Array(curve.length);
-  const previous = new Int32Array(curve.length).fill(-1);
+  const shortest = Math.max(2, Math.round(period * SHORTEST_BEAT));
+  const longest = Math.round(period * LONGEST_BEAT);
+  const spans = longest - shortest + 1;
+  const places = bars?.beats ?? 1;
+  const rowLength = spans * places;
+  const index = (t: number, s: number, place: number) => t * rowLength + s * places + place;
+  // The best chain with a beat at t, reached by a beat s + shortest long, on this place in the bar
+  const score = new Float32Array(curve.length * spans * places);
+  const previous = new Int8Array(score.length);
+  const startCosts = Float32Array.from({ length: spans }, (_, s) => START_STIFFNESS * Math.log((s + shortest) / period) ** 2);
+  const changeCosts = Float32Array.from({ length: spans * (2 * SPAN_CHANGE + 1) }, (_, i) => {
+    const s = Math.floor(i / (2 * SPAN_CHANGE + 1));
+    const was = s + (i % (2 * SPAN_CHANGE + 1)) - SPAN_CHANGE;
+    return BEAT_STIFFNESS * Math.log((s + shortest) / (was + shortest || 1)) ** 2;
+  });
+  const costsPerSpan = 2 * SPAN_CHANGE + 1;
   for (let t = 0; t < curve.length; t++) {
-    let best = 0;
-    for (let p = Math.max(0, t - Math.round(period * 1.4)); p <= t - Math.round(period * 0.7); p++) {
-      const stretch = Math.log((t - p) / period);
-      const value = score[p] - BEAT_STIFFNESS * mean * stretch * stretch;
-      if (value > best) {
-        best = value;
-        previous[t] = p;
+    const onset = curve[t]; // one for each note starting here
+    const bass = bars ? bars.bass[t] : 0;
+    const row = t * rowLength;
+    for (let s = 0; s < spans; s++) {
+      const before = t - s - shortest;
+      const earlier = before * rowLength;
+      const costs = s * costsPerSpan + SPAN_CHANGE;
+      const firstChange = Math.max(-SPAN_CHANGE, -s);
+      const lastChange = Math.min(SPAN_CHANGE, spans - 1 - s);
+      for (let place = 0; place < places; place++) {
+        let best = -startCosts[s];
+        let from = NO_BEAT;
+        if (before >= 0) {
+          const last = place ? place - 1 : places - 1;
+          for (let d = firstChange; d <= lastChange; d++) {
+            const value = score[earlier + (s + d) * places + last] - changeCosts[costs + d];
+            if (value > best) {
+              best = value;
+              from = d;
+            }
+          }
+        }
+        const here = row + s * places + place;
+        score[here] = onset + bass * (place ? -OFF_THE_ONE : ON_THE_ONE) + best;
+        previous[here] = from;
       }
     }
-    score[t] = curve[t] / mean + best;
   }
-  let at = score.length - 1;
-  for (let t = Math.max(0, score.length - Math.round(period)); t < score.length; t++) if (score[t] > score[at]) at = t;
-  const beats: number[] = [];
-  for (; at >= 0; at = previous[at]) beats.unshift(at * BIN);
+  let end = 0;
+  for (let i = 0; i < score.length; i++) if (score[i] > score[end]) end = i;
+  let place = end % places;
+  let span = Math.floor(end / places) % spans;
+  let at = Math.floor(end / rowLength);
+  const beats = [at * BIN];
+  while (previous[index(at, span, place)] !== NO_BEAT) {
+    const d = previous[index(at, span, place)];
+    at -= span + shortest;
+    span += d;
+    place = (place + places - 1) % places;
+    beats.unshift(at * BIN);
+  }
   return beats;
 }
 
@@ -290,13 +368,18 @@ const meterOf = (meter: Meter) => {
   return { beats, beatValue, ticksPerBar: (beats * 192) / beatValue };
 };
 
-// The bars of a piece, from where its bass goes
-function findBars(notes: { tick: number; midi: number }[], bpm: number) {
+const lowestByStep = (notes: { tick: number; midi: number }[]) => {
   const lowest = new Map<number, number>();
   for (const { tick, midi } of notes) {
     const step = Math.round(tick / GRID);
     lowest.set(step, Math.min(midi, lowest.get(step) ?? Infinity));
   }
+  return lowest;
+};
+
+// The bars of a piece, from where its bass goes
+function findBars(notes: { tick: number; midi: number }[], bpm: number) {
+  const lowest = lowestByStep(notes);
   const last = Math.max(0, ...lowest.keys());
   const four = bassPlace(lowest, last, FOUR_BAR);
   const three = bassPlace(lowest, last, THREE_BAR);
@@ -322,6 +405,18 @@ function barPhase(items: { tick: number; hand: Hand; size: number }[], ticksPerB
     }
   }
   return best;
+}
+
+// Which of the sorted `times` is closest to `time`
+function nearestIndex(times: number[], time: number) {
+  let low = 0;
+  let high = times.length - 1;
+  while (high - low > 1) {
+    const middle = (low + high) >> 1;
+    if (times[middle] <= time) low = middle;
+    else high = middle;
+  }
+  return Math.abs(times[high] - time) < Math.abs(times[low] - time) ? high : low;
 }
 
 const emit = (events: Ev[], keys: number[], ticks: number) => {
@@ -361,9 +456,9 @@ export interface Reading {
   placed: { midi: number; hand: Hand; tick: number; start: number }[]; // each note, written and heard
 }
 
-// From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
-// import page: an octave for short keyboards, and half or double when the beat was misjudged.
-export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter, lag = 0 }: { octave?: number; tempoFactor?: number; meter?: Meter; lag?: number } = {}): Reading {
+// Where each note start lies in the piece. The slow part, and the same for all ways of writing it
+// down, so the choices on the import page don't have to wait for it.
+function countNotes(notes: Detected[]) {
   const times = [...new Set(notes.map(n => n.start))].sort((a, b) => a - b);
   // A chord: every note of it takes the time of its first
   const together = (span: number) => times.filter((t, i) => i === 0 || t - times[i - 1] > span);
@@ -377,11 +472,28 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
   const pulse = grid ? null : firstPulse;
   // Played chords are often rolled: what is closer than half a sixteenth belongs together
   const onsets = pulse ? together((0.45 * 15) / pulse) : exact;
-  const beatTimes = curve && pulse ? trackBeats(curve, pulse) : [];
+  // A first count shows the bars, and knowing the bars makes the count hold
+  const firstBeats = curve && pulse ? trackBeats(curve, pulse) : [];
+  const firstSteps = firstBeats.length ? stepsAlong(onsets, firstBeats, 60 / (pulse as number)) : [];
+  const beatsInBar = firstSteps.length ? findBars(notes.map(n => ({ tick: firstSteps[nearestIndex(onsets, n.start)] * GRID, midi: n.midi })), pulse as number) : null;
+  const beatTimes = curve && pulse && beatsInBar?.place !== null && beatsInBar
+    ? trackBeats(curve, pulse, { beats: beatsInBar.meter === '4/4' ? 4 : 3, bass: bassCurve(notes, onsets[0], curve.length, 120 / pulse) })
+    : firstBeats;
   const counted = grid ? 15 / grid.step : beatTimes.length > 1 ? tempoAlong(beatTimes) : pulse;
   const tempo = counted ? { ...steady, bpm: counted, sure: Boolean(grid) || (exact.length < 8 && steady.sure) } : steady;
-  const bpm = tempo.bpm * tempoFactor;
   const anchors = !onsets.length ? [] : grid ? grid.steps : curve ? stepsAlong(onsets, beatTimes, 60 / tempo.bpm) : follow(onsets, steady.start).steps;
+  return { onsets, anchors, tempo, played: Boolean(pulse) };
+}
+
+const counts = new WeakMap<Detected[], ReturnType<typeof countNotes>>();
+
+// From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
+// import page: an octave for short keyboards, and half or double when the beat was misjudged.
+export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter, lag = 0 }: { octave?: number; tempoFactor?: number; meter?: Meter; lag?: number } = {}): Reading {
+  const count = counts.get(notes) ?? countNotes(notes);
+  counts.set(notes, count);
+  const { onsets, anchors, tempo, played } = count;
+  const bpm = tempo.bpm * tempoFactor;
   const scale = tempoFactor; // half the tempo: every note takes half as many steps
 
   // Seconds to ticks along the followed beat, between the note starts
@@ -398,8 +510,7 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
   const snap = (ticks: number) => Math.round(ticks / GRID) * GRID;
 
   const placed = notes.map(note => {
-    const nearest = onsets.reduce((a, t, i) => (Math.abs(t - note.start) < Math.abs(onsets[a] - note.start) ? i : a), 0);
-    const tick = snap(anchors[nearest] * GRID * scale);
+    const tick = snap(anchors[nearestIndex(onsets, note.start)] * GRID * scale);
     return {
       midi: note.midi + octave * 12,
       hand: note.hand,
@@ -426,7 +537,7 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
   const moved = placed.map(n => ({ ...n, tick: n.tick + pickup }));
   const key = findKey(notes);
   // Played music is mostly held with the pedal: a chord lasts until the next one
-  const hold = pulse ? GRID * 3 : GRID;
+  const hold = played ? GRID * 3 : GRID;
 
   const unsure: string[] = [];
   const hands = {
