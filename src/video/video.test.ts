@@ -203,6 +203,50 @@ describe('Tracker', () => {
     expect(notes.filter(n => n.midi !== 72).map(n => n.midi)).toEqual([73, 75]);
   });
 
+  it('reads a bar with a letter in it as one note', () => {
+    const map = findKeyboard(picture(21, 108));
+    if (!map) throw new Error('keine Tastatur');
+    const tracker = new Tracker(map);
+    const x = map.keys.find(k => k.midi === 72)?.x ?? 0;
+    for (let f = 0; f < 60; f++) {
+      const time = f / 30;
+      const frame = picture(21, 108, time >= 0.5 && time < 1.5 ? [{ midi: 72, color: GREEN }] : []);
+      // A dark outline down the middle, and for a moment a lighter shape across the whole bar
+      if (time >= 0.5 && time < 1.5) rect(frame, x - 1, 0, 2, TOP, [0, 0, 0]);
+      if (time >= 0.9 && time < 0.97) rect(frame, x - 8, 0, 16, TOP, [40, 90, 50]);
+      tracker.add(rowOf(frame, map.scanY), time);
+    }
+    const notes = tracker.finish();
+    expect(notes.map(n => n.midi)).toEqual([72]);
+    expect(notes[0].end - notes[0].start).toBeGreaterThan(0.9);
+    expect(notes[0].hand).toBe('right');
+  });
+
+  it('still keeps a repeated key apart when a bar is darkened by nothing', () => {
+    const notes = track([
+      { midi: 72, start: 0.5, end: 0.8, color: GREEN },
+      { midi: 72, start: 0.87, end: 1.2, color: GREEN },
+    ], 2);
+    expect(notes).toHaveLength(2);
+  });
+
+  it('takes a dark shade that always looks the same for real bars', () => {
+    const OLIVE: Color = [80, 90, 10];
+    const times = Array.from({ length: 10 }, (_, i) => 0.2 + i * 0.6);
+    const bright = times.map(start => ({ midi: 61, start, end: start + 0.2, color: GREEN }));
+    const dark = times.map(start => ({ midi: 54, start, end: start + 0.2, color: OLIVE }));
+    const notes = track([...bright, ...dark], 7);
+    expect(notes.filter(n => n.midi === 54)).toHaveLength(10);
+  });
+
+  it('does not take uneven glimmer for such a shade', () => {
+    const times = Array.from({ length: 12 }, (_, i) => 0.2 + i * 0.6);
+    const bright = times.map(start => ({ midi: 61, start, end: start + 0.2, color: GREEN }));
+    const glimmer = times.map((start, i) => ({ midi: 54, start, end: start + 0.2, color: [60 + (i % 9) * 11, 20, 5] as Color }));
+    const notes = track([...bright, ...glimmer], 8);
+    expect(notes.filter(n => n.midi === 54)).toHaveLength(0);
+  });
+
   it('splits at middle C when the video has one colour', () => {
     const notes = track([
       { midi: 72, start: 0.5, end: 1, color: GREEN },

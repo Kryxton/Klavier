@@ -16,6 +16,16 @@ const NEARBY = 8; // seconds
 const FAINT = 0.65; // share of a real bar's brightness below which something isn't a bar
 const SOLID = 0.6; // share of it that a single pixel needs to belong to a bar
 const NEAR_NOTE = 0.15; // seconds; something this close to a note on its key is part of that note
+const LETTER_GAP = 0.25; // key widths; many videos write the note's name into the bar, with an outline
+const BRIDGE = 0.12; // seconds a letter may darken a bar for...
+const BRIDGE_LEVEL = 0.25; // ...as long as its lane stays this bright; between two notes it goes dark
+const SHADE_SECONDS = 0.1; // a second, darker shade of bars: seen only in bars at least this long...
+const SHADE_BARS = 8; // ...of which there are this many...
+const VIVID = 0.85; // ...this colourful...
+const SHADE_SPREAD = 0.2; // ...and this close in brightness...
+const SHADE_SHARE = 0.7; // ...for this share of them. Sparks vary, a colour in a video doesn't.
+const BRIGHT_SHARE = 0.75; // how far up among all bars seen a solid one lies
+const BLACK_LANE = 0.3; // key widths to each side of a black key's middle
 
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -102,6 +112,21 @@ interface Run {
   to: number;
 }
 
+// The bar's own colour: its most colourful pixel, because a letter may fill the middle
+function strongestColour(row: Uint8Array, { from, to }: Run) {
+  let best = [0, 0, 0];
+  let bestSpread = -1;
+  for (let x = Math.ceil(from); x <= Math.floor(to); x++) {
+    const colour = [row[x * 3], row[x * 3 + 1], row[x * 3 + 2]];
+    const spread = Math.max(...colour) - Math.min(...colour);
+    if (spread > bestSpread) {
+      bestSpread = spread;
+      best = colour;
+    }
+  }
+  return best;
+}
+
 // One falling bar, followed from picture to picture while it passes the row
 interface Bar {
   run: Run;
@@ -109,6 +134,14 @@ interface Bar {
   last: number;
   centres: number[];
   colours: number[][];
+}
+
+interface Found {
+  key: KeyMap['keys'][number];
+  bar: Bar;
+  strength: number;
+  hue: number | null;
+  vividness: number;
 }
 
 // Reads the row above the keys, picture by picture. Bars are followed as whole objects: the key is
@@ -155,16 +188,20 @@ export class Tracker {
   }
 
   // The stretches of one row that differ from the usual picture; a wide one is several bars side by side
-  private runsOf(row: Uint8Array, usual: number[][], limit: number) {
+  private runsOf(row: Uint8Array, usual: number[][], limits: Float32Array) {
     const { unit } = this.keys;
+    const gap = unit * LETTER_GAP;
     const runs: Run[] = [];
     let from = -1;
+    let last = -1;
     for (let x = 0; x <= this.width; x++) {
       const lit = x < this.width
-        && Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2]) > limit;
-      if (lit && from < 0) from = x;
-      if (!lit && from >= 0) {
-        const width = x - from;
+        && Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2]) > limits[x];
+      if (lit) {
+        if (from < 0) from = x;
+        last = x;
+      } else if (from >= 0 && (x === this.width || x - last > gap)) {
+        const width = last + 1 - from;
         if (width >= unit * 0.3) {
           const parts = width >= unit * 1.6 ? Math.round(width / unit) : 1;
           for (let p = 0; p < parts; p++) {
@@ -177,11 +214,11 @@ export class Tracker {
     return runs;
   }
 
-  private followBars(usual: number[][], limit: number, shortest = MIN_SECONDS) {
+  private followBars(usual: number[][], limits: Float32Array, shortest = MIN_SECONDS) {
     const done: Bar[] = [];
     let open: Bar[] = [];
     this.rows.forEach((row, f) => {
-      const runs = this.shown[f] ? this.runsOf(row, usual, limit) : [];
+      const runs = this.shown[f] ? this.runsOf(row, usual, limits) : [];
       const next: Bar[] = [];
       for (const run of runs) {
         const bar = open.find(b => {
@@ -189,8 +226,7 @@ export class Tracker {
           return overlap >= 0.5 * Math.min(b.run.to - b.run.from, run.to - run.from);
         });
         const centre = (run.from + run.to) / 2;
-        const i = Math.round(centre) * 3;
-        const colour = [row[i], row[i + 1], row[i + 2]];
+        const colour = strongestColour(row, run);
         if (bar) {
           open = open.filter(b => b !== bar);
           bar.run = run;
@@ -221,7 +257,7 @@ export class Tracker {
   }
 
   // The bars with their key and brightness
-  private measured(bars: Bar[], usual: number[][]) {
+  private measured(bars: Bar[], usual: number[][]): Found[] {
     return bars.flatMap(bar => {
       const key = this.keyOf(median(bar.centres));
       if (!key) return [];
@@ -230,8 +266,74 @@ export class Tracker {
       // The brightest moment counts: short bars are blurred for most of their way
       const changes = bar.colours.map(c => c.reduce((sum, value, i) => sum + Math.abs(value - usual[place][i]), 0)).sort((a, b) => a - b);
       const strength = changes[Math.floor(changes.length * 0.8)];
-      return [{ key, bar, strength, hue: hueOf(colour) }];
+      const vividness = (Math.max(...colour) - Math.min(...colour)) / (Math.max(...colour) || 1);
+      return [{ key, bar, strength, hue: hueOf(colour), vividness }];
     });
+  }
+
+  // How bright a pixel has to be, for each place in the row. Black keys apart: many videos draw
+  // their bars much darker, and those are bars all the same. What is bright for its kind of key
+  // shows in the upper part of what was seen, which sparks and dust don't reach.
+  private limitsFrom(rough: Found[]) {
+    const solid = (black: boolean) => {
+      const same = rough.filter(f => isBlack(f.key.midi) === black).map(f => f.strength).sort((a, b) => a - b);
+      return same.length ? Math.max(CHANGE, SOLID * same[Math.floor(same.length * BRIGHT_SHARE)]) : CHANGE;
+    };
+    const limits = new Float32Array(this.width).fill(solid(false));
+    const dark = solid(true);
+    const { keys, unit } = this.keys;
+    for (const key of keys) {
+      if (!isBlack(key.midi)) continue;
+      const left = Math.max(0, Math.ceil(key.x - unit * BLACK_LANE));
+      const right = Math.min(this.width - 1, Math.floor(key.x + unit * BLACK_LANE));
+      for (let x = left; x <= right; x++) limits[x] = Math.min(limits[x], dark);
+    }
+    return limits;
+  }
+
+  // A letter passing the row darkens a bar for a moment and cuts it in two. Only the lane tells this
+  // from two notes in a row: it never goes back to the background in between.
+  private bridged(found: Found[], usual: number[][]) {
+    const { unit } = this.keys;
+    const staysLit = (a: Found, b: Found) => {
+      const middle = Math.round(a.key.x);
+      const reach = Math.max(1, Math.round(unit * 0.25));
+      const needed = BRIDGE_LEVEL * Math.max(a.strength, b.strength);
+      for (let f = a.bar.last + 1; f < b.bar.first; f++) {
+        let sum = 0;
+        for (let x = Math.max(0, middle - reach); x <= Math.min(this.width - 1, middle + reach); x++) {
+          for (let c = 0; c < 3; c++) sum += Math.abs(this.rows[f][x * 3 + c] - usual[x][c]);
+        }
+        if (sum / (2 * reach + 1) < needed) return false;
+      }
+      return true;
+    };
+    const joined: Found[] = [];
+    const latest = new Map<number, Found>();
+    for (const piece of [...found].sort((a, b) => a.bar.first - b.bar.first)) {
+      const before = latest.get(piece.key.midi);
+      if (before && this.times[piece.bar.first] - this.times[before.bar.last] <= BRIDGE && staysLit(before, piece)) {
+        before.bar.last = piece.bar.last;
+        before.bar.centres.push(...piece.bar.centres);
+        before.bar.colours.push(...piece.bar.colours);
+        before.strength = Math.max(before.strength, piece.strength);
+        before.hue ??= piece.hue;
+      } else {
+        joined.push(piece);
+        latest.set(piece.key.midi, piece);
+      }
+    }
+    return joined;
+  }
+
+  // Some videos draw one hand's black keys far darker than everything else, as dark as sparks. But
+  // they do it the same way every time. Bars of one clear colour and brightness are real.
+  private secondShade(seen: Found[]) {
+    const clear = seen.filter(f => f.vividness >= VIVID && this.times[f.bar.last] - this.times[f.bar.first] >= SHADE_SECONDS);
+    if (clear.length < SHADE_BARS) return [];
+    const middle = median(clear.map(f => f.strength));
+    const alike = clear.filter(f => Math.abs(f.strength - middle) <= SHADE_SPREAD * middle);
+    return alike.length >= SHADE_SHARE * clear.length ? alike : [];
   }
 
   private isLong(bar: Bar) {
@@ -249,13 +351,9 @@ export class Tracker {
     // Sparks and glow between two bars would join them into one wrong note, somewhere between
     // their keys. A first look shows how bright a solid bar is here, the second only takes that.
     // With few pictures a short bar shows in just one of them, so the first look takes those too
-    const rough = this.measured(this.followBars(usual, CHANGE, 0), usual);
-    const shades = [false, true].flatMap(black => {
-      const same = rough.filter(f => this.isLong(f.bar) && isBlack(f.key.midi) === black);
-      return same.length ? [median(same.map(f => f.strength))] : [];
-    });
-    const limit = shades.length ? Math.max(CHANGE, SOLID * Math.min(...shades)) : CHANGE;
-    const found = this.measured(this.followBars(usual, limit), usual);
+    const flat = new Float32Array(this.width).fill(CHANGE);
+    const rough = this.bridged(this.measured(this.followBars(usual, flat, 0), usual), usual);
+    const found = this.bridged(this.measured(this.followBars(usual, this.limitsFrom(rough)), usual), usual);
 
     // Sparks and dust behind the bars are much fainter than the bars. Long bars show how bright a
     // real one is, for black and white keys apart, because many videos draw them in two shades.
@@ -278,11 +376,15 @@ export class Tracker {
     const whole = kept.filter(note => !kept.some(other =>
       other !== note && other.midi === note.midi && other.start <= note.start && other.end >= note.end
       && other.end - other.start > note.end - note.start));
-    const free = (midi: number, start: number, end: number) =>
-      !whole.some(note => note.midi === midi && note.start < end + NEAR_NOTE && note.end > start - NEAR_NOTE);
-    this.doubtful = assignHands(rough
-      .map(f => ({ midi: f.key.midi, start: this.times[f.bar.first], end: this.times[f.bar.last], hue: f.hue }))
-      .filter(note => free(note.midi, note.start, note.end)));
-    return assignHands(whole).sort((a, b) => a.start - b.start || a.midi - b.midi);
+    const noteOf = (f: Found) => ({ midi: f.key.midi, start: this.times[f.bar.first], end: this.times[f.bar.last], hue: f.hue });
+    const free = (f: Found) => {
+      const { midi, start, end } = noteOf(f);
+      return !whole.some(note => note.midi === midi && note.start < end + NEAR_NOTE && note.end > start - NEAR_NOTE);
+    };
+    const unclaimed = rough.filter(free);
+    const shade = this.secondShade(unclaimed);
+    const all = assignHands([...whole, ...shade.map(noteOf)]).sort((a, b) => a.start - b.start || a.midi - b.midi);
+    this.doubtful = assignHands(unclaimed.filter(f => !shade.includes(f)).map(noteOf));
+    return all;
   }
 }
