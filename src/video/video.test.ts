@@ -213,7 +213,7 @@ describe('Tracker', () => {
       const frame = picture(21, 108, time >= 0.5 && time < 1.5 ? [{ midi: 72, color: GREEN }] : []);
       // A dark outline down the middle, and for a moment a lighter shape across the whole bar
       if (time >= 0.5 && time < 1.5) rect(frame, x - 1, 0, 2, TOP, [0, 0, 0]);
-      if (time >= 0.9 && time < 0.97) rect(frame, x - 8, 0, 16, TOP, [40, 90, 50]);
+      if (time >= 0.9 && time < 0.95) rect(frame, x - 8, 0, 16, TOP, [40, 90, 50]);
       tracker.add(rowOf(frame, map.scanY), time);
     }
     const notes = tracker.finish();

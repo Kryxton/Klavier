@@ -286,7 +286,7 @@ export class Tracker {
       if (!isBlack(key.midi)) continue;
       const left = Math.max(0, Math.ceil(key.x - unit * BLACK_LANE));
       const right = Math.min(this.width - 1, Math.floor(key.x + unit * BLACK_LANE));
-      for (let x = left; x <= right; x++) limits[x] = Math.min(limits[x], dark);
+      limits.fill(dark, left, right + 1);
     }
     return limits;
   }
