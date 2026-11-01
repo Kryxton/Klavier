@@ -143,9 +143,11 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* The score: VexFlow draws with fill and stroke on each part of a note */
+/* Each line is its own picture; notes far below the staves reach into the next one */
 .sheet svg {
   display: block;
   margin: 0 auto;
+  overflow: visible;
 }
 .sheet .vf-stavenote,
 .sheet .vf-stavenote * {

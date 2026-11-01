@@ -143,7 +143,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   const shownDotted = event ? Boolean(event.dotted) : dotted;
   const shownTie = event ? Boolean(event.tie) : tie;
   const blackKeys = event?.keys.filter(isBlack) ?? [];
-  const barToggle = barCount(piece) > 0 && <Toggle on={barTool.on} onClick={toggleBars} className="px-3">Takte</Toggle>;
+  const barToggle = (barTool.on || barCount(piece) > 0) && <Toggle on={barTool.on} onClick={toggleBars} className="px-3">Takte</Toggle>;
 
   return (
     <div className="h-full flex flex-col">

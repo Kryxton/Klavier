@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Accidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, StaveTie, Voice } from 'vexflow';
 import type { Hand, Piece } from '../types';
+import type { Bars } from '../utils/edit';
 import { keyName, keySignature, signFor, spell } from '../utils/notes';
 import { barTicks, toBars, type Printed } from '../utils/score';
 
@@ -9,6 +10,8 @@ const REST_LINE: Record<Clef, string> = { treble: 'b/4', bass: 'd/3' };
 
 const LEFT = 22; // room for the brace
 const STAFF_GAP = 100; // top line of the treble staff to top line of the bass staff
+const STAFF_TOP = 30; // from a stave's y to just above its top line
+const STAFF_HEIGHT = 60; // the five lines with a little air
 const SYSTEM_HEIGHT = 190;
 const MIN_BAR = 110;
 const TAP_RADIUS = 32; // px; a tap counts for the nearest note this close
@@ -139,10 +142,46 @@ function neighbour(bars: Bar[], hand: Hand, index: number, step: 1 | -1) {
   return null;
 }
 
+// Where the bars of a line stand, in the units of the score
+function barsOfLine({ bars }: Measured, { longest, lines, leadOf }: Page, lineIndex: number) {
+  const line = lines[lineIndex];
+  const full = lineIndex < lines.length - 1;
+  // Lines stretch to the full width; the last one only a little, so one bar stays one bar wide
+  const needed = line.bars.reduce((sum, i) => sum + bars[i].need, 0);
+  const free = longest - LEFT - 6 - line.used;
+  const stretch = full ? 1 + free / needed : Math.min(1.5, 1 + free / needed);
+  let x = LEFT;
+  return line.bars.map((index, position) => {
+    const width = bars[index].need * stretch + (position === 0 ? leadOf(index === 0) : 0);
+    x += width;
+    return { index, x: x - width, width };
+  });
+}
+
+// All bars in px on the page, for marking and tapping whole bars
+function barBoxes(measured: Measured, page: Page) {
+  const { scale, lines } = page;
+  let y = 0;
+  return lines.flatMap((line, lineIndex) => {
+    const top = y + (10 + line.room.above) * scale;
+    y += line.height * scale;
+    return barsOfLine(measured, page, lineIndex).map(({ index, x, width }) => ({ index, left: x * scale, width: width * scale, top }));
+  });
+}
+
+// The bar closest to a point of the page; a tap beside the staves still means the bar next to it
+function nearestBar(boxes: ReturnType<typeof barBoxes>, x: number, y: number, scale: number) {
+  const away = ({ left, width, top }: typeof boxes[number]) => Math.hypot(
+    Math.max(left - x, 0, x - left - width),
+    Math.max(top + STAFF_TOP * scale - y, 0, y - top - (STAFF_TOP + STAFF_GAP + STAFF_HEIGHT) * scale),
+  );
+  return boxes.reduce((best, box) => (away(box) < away(best) ? box : best)).index;
+}
+
 // One line of the score into its own picture
 function drawLine(host: HTMLElement, { piece, bars }: Measured, page: Page, lineIndex: number): DrawnNote[] {
   host.innerHTML = '';
-  const { scale, longest, lines, leadOf } = page;
+  const { scale, longest, lines } = page;
   const line = lines[lineIndex];
   const renderer = new Renderer(host as HTMLDivElement, Renderer.Backends.SVG);
   renderer.resize(longest * scale, line.height * scale);
@@ -152,18 +191,10 @@ function drawLine(host: HTMLElement, { piece, bars }: Measured, page: Page, line
   const drawn: DrawnNote[] = [];
   const placed: Record<Hand, { item: Printed; note: StaveNote; bar: number }[]> = { right: [], left: [] };
   const top = 10 + line.room.above;
-  const full = lineIndex < lines.length - 1;
-  // Lines stretch to the full width; the last one only a little, so one bar stays one bar wide
-  const needed = line.bars.reduce((sum, i) => sum + bars[i].need, 0);
-  const free = longest - LEFT - 6 - line.used;
-  const stretch = full ? 1 + free / needed : Math.min(1.5, 1 + free / needed);
 
-  let x = LEFT;
-  line.bars.forEach((index, position) => {
+  barsOfLine({ piece, bars }, page, lineIndex).forEach(({ index, x, width: barWidth }, position) => {
     const bar = bars[index];
     const first = position === 0;
-    const lead = first ? leadOf(index === 0) : 0;
-    const barWidth = bar.need * stretch + lead;
 
     const treble = new Stave(x, top, barWidth);
     const bass = new Stave(x, top + STAFF_GAP, barWidth);
@@ -200,7 +231,6 @@ function drawLine(host: HTMLElement, { piece, bars }: Measured, page: Page, line
         if (el) drawn.push({ hand, id: item.ev.id, el });
       });
     }
-    x += barWidth;
   });
 
   for (const hand of ['right', 'left'] as const) {
@@ -240,9 +270,10 @@ const scrollerOf = (element: HTMLElement) => {
 // The two-handed score. Only the lines near the screen exist as pictures, so a long piece opens as
 // fast as a short one and an edit redraws just those. Which notes are selected or sounding only
 // switches a class on the notes concerned, so playback doesn't redraw anything.
-export function Sheet({ piece, selected, active, follow, onSelect }: {
+export function Sheet({ piece, selected, active, follow, onSelect, bars, onBar }: {
   piece: Piece; selected?: string | null; active?: ReadonlySet<string>; follow?: string | null;
   onSelect?: (hand: Hand, id: string) => void;
+  bars?: Bars | null; onBar?: (bar: number) => void; // with onBar a tap means a bar, not a note
 }) {
   const host = useRef<HTMLDivElement>(null);
   const notes = useRef(new Map<number, DrawnNote[]>());
@@ -266,6 +297,8 @@ export function Sheet({ piece, selected, active, follow, onSelect }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only what changes the picture
   const measured = useMemo(() => measure(piece), [hands, key, beats, beatValue]);
   const page = useMemo(() => (width ? arrange(measured, width) : null), [measured, width]);
+  const pickBars = Boolean(onBar);
+  const boxes = useMemo(() => (pickBars && page ? barBoxes(measured, page) : []), [pickBars, measured, page]);
 
   const mark = (note: DrawnNote) => {
     note.el.classList.toggle('note-selected', note.id === lit.current.selected);
@@ -328,6 +361,8 @@ export function Sheet({ piece, selected, active, follow, onSelect }: {
   }, [follow, page, drawCount]);
 
   const tap = (x: number, y: number) => {
+    const area = host.current?.getBoundingClientRect();
+    if (onBar && area && boxes.length) return onBar(nearestBar(boxes, x - area.left, y - area.top, page?.scale ?? 1));
     if (!onSelect) return;
     let best: DrawnNote | null = null;
     let bestDistance = TAP_RADIUS;
@@ -344,9 +379,28 @@ export function Sheet({ piece, selected, active, follow, onSelect }: {
     if (best) onSelect(best.hand, best.id);
   };
 
+  const scale = page?.scale ?? 1;
   return (
-    <div ref={host} data-testid="sheet" className="sheet w-full" onClick={e => tap(e.clientX, e.clientY)}>
-      {page?.lines.map((line, i) => <div key={i} data-line={i} style={{ height: line.height * page.scale, width: page.longest * page.scale }} />)}
+    <div className="relative">
+      <div ref={host} data-testid="sheet" className="sheet w-full" onClick={e => tap(e.clientX, e.clientY)}>
+        {page?.lines.map((line, i) => <div key={i} data-line={i} style={{ height: line.height * page.scale, width: page.longest * page.scale }} />)}
+      </div>
+      {boxes.map(box => (
+        <Fragment key={box.index}>
+          <span className="pointer-events-none absolute text-[11px] tabular-nums text-dim" style={{ left: box.left + 2, top: box.top + (STAFF_TOP - 16) * scale - 4 }}>{box.index + 1}</span>
+          {bars && box.index >= bars.from && box.index <= bars.to && (
+            <div
+              data-testid="marked-bar"
+              className="pointer-events-none absolute bg-accent/15"
+              style={{
+                left: box.left, width: box.width,
+                top: box.top + (STAFF_TOP + (bars.hands === 'left' ? STAFF_GAP : 0)) * scale,
+                height: (STAFF_HEIGHT + (bars.hands === 'both' ? STAFF_GAP : 0)) * scale,
+              }}
+            />
+          )}
+        </Fragment>
+      ))}
     </div>
   );
 }

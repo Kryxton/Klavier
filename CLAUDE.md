@@ -36,10 +36,20 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
 - `utils/score.ts`: `PPQ` 48 ticks; `toBars` splits events over barlines into tied `Printed` notes
   (`continued` = no sign of its own), `timeline` joins ties into `Sound`s.
 - `utils/edit.ts`: plain functions piece → piece. `App.tsx` `change` keeps undo/redo (100 steps).
+  **Changing a note keeps the time** (the user asked for it 2026-11-01): what stands behind stays in
+  its place, because a hand that shifts loses its bars and the other hand. Shorter leaves a rest,
+  longer takes from what follows, „Teilen“ = two notes in the time of one, „+“ inside a hand comes
+  out of the note, deleting leaves a rest. Only a selected rest moves a hand: „+“ adds time,
+  deleting closes the gap. The end of a hand grows and shrinks freely. Bars: `insertBars` (both
+  hands move, a hand not copied gets rests), `replaceBars` (only the chosen hands), `removeBars`
+  (one hand: rests). All go through `cutAt`, which splits notes across the cut.
 - `utils/player.ts`: `Player`, no React or audio inside, tested with a fake clock. Timers only wake
   it up; notes are placed on the audio clock (`LOOKAHEAD`), so timing stays exact. `audio.ts` = Tone
   (Salamander samples, synth until they have arrived), `usePlayer.ts` = the React side.
-- `components/Sheet.tsx`: VexFlow. Both hands go through one `Formatter`, so notes that sound together
+- `components/Sheet.tsx`: VexFlow. `bars` marks whole bars and `onBar` makes a tap mean a bar: a layer
+  of boxes above the lines, worked out from `measure`/`arrange`, so it needs no drawn line. Each line
+  has `overflow: visible`, low notes reach into the next one.
+  Both hands go through one `Formatter`, so notes that sound together
   stand above each other. **Long pieces are drawn line by line:** every line is its own SVG, made
   when it nears the screen (`IntersectionObserver`), one to a frame, so 119 bars open in 90 ms instead
   of blocking 500 and an edit redraws only those. Bar widths are estimated (`roomOf`, on the wide
@@ -53,8 +63,10 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   Colours are in the `@theme static` block: Tailwind drops tokens no class uses, and `addColorStop`
   throws on an empty string.
 - Pages: `Pieces` (home, list, backup file), `Import` (video to piece), `Write` = „Notenblatt“: the
-  score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord, „+“
-  puts a rest behind the note to fill), `Practice` (Noten, Fallend as the extra).
+  score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord; the
+  button with note symbols shows what „Teilen“ makes of the note, on the last note it copies),
+  „Takte“ = `components/BarTools.tsx`: tap the first and last bar, choose the hands, copy to where
+  it should begin or to the end; `Practice` (Noten, Fallend as the extra).
 - `src/video/`: video to notes, runs on the device, no server.
   - `keyboard.ts`: finds the keys from the 2-3 pattern of the black keys (88 keys: octave certain;
     fewer: guessed, the import page corrects it). The top edge is found straight up from the black
