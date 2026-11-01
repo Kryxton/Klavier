@@ -1,3 +1,4 @@
+import { findKey } from './rhythm';
 import type { Detected } from './tracker';
 
 export const RATE = 11025; // Hz; the overtones up to here are what tell keys apart
@@ -281,8 +282,10 @@ async function splitIntoKeys(sound: Sound, templates: Templates) {
 }
 
 // The notes against the sound. The picture proposes, the sound decides: doubtful bars that clearly
-// sound become notes, and notes that are silent go to the neighbouring key that does sound, or
-// away. Solid bars with no such evidence stay: quiet inner notes can't be heard out of a chord.
+// sound become notes, silent notes outside the key go to the neighbouring key that does sound, or
+// away. A note that fits the key stays: the overtones of a lower note can sound like its neighbour,
+// and this has replaced right notes. So do solid bars with no such evidence, because quiet inner
+// notes can't be heard out of a chord.
 export async function judge(notes: Detected[], doubtful: Detected[], samples: Float32Array, progress: (share: number) => void = () => {}): Promise<Checked | null> {
   if (notes.length < 8 || samples.length < SIZE) return null;
   const sound = await spectrogram(samples);
@@ -332,6 +335,8 @@ export async function judge(notes: Detected[], doubtful: Detected[], samples: Fl
   const sounding = (list: Detected[], midi: number, start: number) =>
     list.some(other => other.midi === midi && other.start - SAME_NOTE < start && start < other.end + SAME_NOTE);
   const everything = [...notes, ...added];
+  const key = findKey(notes);
+  const scale = [0, 2, 4, 5, 7, 9, 11].map(step => ((key * 7 + step) % 12 + 12) % 12);
   let confirmed = 0;
   let moved = 0;
   let dropped = 0;
@@ -347,7 +352,7 @@ export async function judge(notes: Detected[], doubtful: Detected[], samples: Fl
     const neighbour = [-1, 1, -2, 2]
       .map(d => ({ midi: note.midi + d, value: clearly(note.midi + d, note.start) }))
       .reduce((a, b) => (b.value > a.value ? b : a));
-    if (neighbour.value >= CLEAR) {
+    if (neighbour.value >= CLEAR && !scale.includes(note.midi % 12)) {
       if (sounding(everything, neighbour.midi, note.start)) {
         dropped++;
       } else {

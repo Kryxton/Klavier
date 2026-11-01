@@ -13,6 +13,8 @@ const DRIFT = 0.15; // how far it may wander
 const CHORD = 0.06; // seconds; notes this close were meant together
 const BIN = 0.01; // seconds, for following played music
 const BEAT_STIFFNESS = 30; // how strongly beats keep to the pulse
+const EXACT_STIFFNESS = 300; // and in a machine-made piece, which only changes tempo on purpose
+const TEMPO_WINDOW = 16; // beats over which the tempo is read
 const PULSE_MIN = 0.3; // seconds between beats
 const PULSE_MAX = 2;
 
@@ -82,7 +84,7 @@ function findPulse(curve: Float64Array) {
 // The best chain of beats through the whole piece: each beat wants to sit on note starts and about
 // one pulse after the one before. Seen as a whole, one early chord can't throw the count off, which
 // counting note by note can't avoid.
-function trackBeats(curve: Float64Array, bpm: number) {
+function trackBeats(curve: Float64Array, bpm: number, stiffness: number) {
   const period = 60 / bpm / BIN;
   const mean = curve.reduce((sum, value) => sum + value, 0) / curve.length || 1;
   const score = new Float64Array(curve.length);
@@ -91,7 +93,7 @@ function trackBeats(curve: Float64Array, bpm: number) {
     let best = 0;
     for (let p = Math.max(0, t - Math.round(period * 1.4)); p <= t - Math.round(period * 0.7); p++) {
       const stretch = Math.log((t - p) / period);
-      const value = score[p] - BEAT_STIFFNESS * mean * stretch * stretch;
+      const value = score[p] - stiffness * mean * stretch * stretch;
       if (value > best) {
         best = value;
         previous[t] = p;
@@ -106,17 +108,26 @@ function trackBeats(curve: Float64Array, bpm: number) {
   return beats;
 }
 
-// Each note start as a step of sixteenths: four to every beat, whatever a beat really took
+// Each note start as a step of sixteenths: four to every beat, whatever a beat really took. Notes
+// before the first beat count back from it.
 function stepsAlong(onsets: number[], beats: number[], period: number) {
   const first = onsets[0];
-  return onsets.map(time => {
+  const steps = onsets.map(time => {
     const at = time - first;
     let beat = beats.findIndex((_, i) => at < (beats[i + 1] ?? Infinity));
     if (beat < 0) beat = 0;
     const from = beats[beat] ?? 0;
-    const span = (beats[beat + 1] ?? from + period) - from;
-    return Math.max(0, beat * 4 + Math.round((4 * (at - from)) / span));
+    const span = at < from ? period : (beats[beat + 1] ?? from + period) - from;
+    return beat * 4 + Math.round((4 * (at - from)) / span);
   });
+  return steps.map(step => step - steps[0]);
+}
+
+// The usual tempo along the beats: an ending that slows down isn't the tempo of the piece
+function tempoAlong(beats: number[]) {
+  const reach = Math.min(TEMPO_WINDOW, beats.length - 1);
+  const spans = beats.slice(reach).map((beat, i) => (beat - beats[i]) / reach).sort((a, b) => a - b);
+  return 60 / spans[spans.length >> 1];
 }
 
 // Many tempos fit mathematically; the right one writes the notes as plain values. Even spacing at
@@ -214,6 +225,7 @@ export interface Reading {
   bpm: number;
   sure: boolean; // the notes fit a steady beat
   piece: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands'>;
+  placed: { midi: number; hand: Hand; tick: number; start: number }[]; // each note, written and heard
 }
 
 // From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
@@ -224,17 +236,19 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
   const together = (span: number) => times.filter((t, i) => i === 0 || t - times[i - 1] > span);
   const exact = together(CHORD);
   const steady = findTempo(exact);
-  const curve = steady.sure || exact.length < 8 ? null : startCurve(
+  const curve = exact.length < 8 ? null : startCurve(
     exact, exact.map((t, i) => notes.filter(n => n.start >= t && n.start < (exact[i + 1] ?? Infinity)).length),
   );
-  const pulse = curve ? findPulse(curve) : null;
+  const pulse = curve && !steady.sure ? findPulse(curve) : null;
   // Played chords are often rolled: what is closer than half a sixteenth belongs together
   const onsets = pulse ? together((0.45 * 15) / pulse) : exact;
-  const beatTimes = curve && pulse ? trackBeats(curve, pulse) : [];
-  const counted = beatTimes.length > 1 ? (60 * (beatTimes.length - 1)) / (beatTimes[beatTimes.length - 1] - beatTimes[0]) : pulse;
+  // Seen as a whole, even machine-made pieces: counting on from note to note, one note a few
+  // milliseconds off can cost an eighth, and every bar after it
+  const beatTimes = curve ? trackBeats(curve, pulse ?? steady.bpm, pulse ? BEAT_STIFFNESS : EXACT_STIFFNESS) : [];
+  const counted = beatTimes.length > 1 ? tempoAlong(beatTimes) : pulse;
   const tempo = counted ? { ...steady, bpm: counted } : steady;
   const bpm = tempo.bpm * tempoFactor;
-  const anchors = !onsets.length ? [] : pulse ? stepsAlong(onsets, beatTimes, 60 / tempo.bpm) : follow(onsets, steady.start).steps;
+  const anchors = !onsets.length ? [] : curve ? stepsAlong(onsets, beatTimes, 60 / tempo.bpm) : follow(onsets, steady.start).steps;
   const scale = tempoFactor; // half the tempo: every note takes half as many steps
 
   // Seconds to ticks along the followed beat, between the note starts
@@ -256,6 +270,7 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
     return {
       midi: note.midi + octave * 12,
       hand: note.hand,
+      start: note.start,
       tick,
       // A bar looks a little shorter than the note it stands for, so its end is rounded up
       length: Math.max(GRID, snap(tickAt(note.end) + 0.3 * GRID) - tick),
@@ -282,6 +297,7 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1 } = {
   return {
     bpm,
     sure: tempo.sure,
+    placed: moved.map(({ midi, hand, tick, start }) => ({ midi, hand, tick, start })),
     piece: {
       beats, beatValue, key, bpm: Math.round(bpm),
       hands: {

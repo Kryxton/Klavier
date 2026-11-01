@@ -247,6 +247,23 @@ describe('Tracker', () => {
     expect(notes.filter(n => n.midi === 54)).toHaveLength(0);
   });
 
+  it('reads the start of a bar the same with a sharp or a blurred edge', () => {
+    const map = findKeyboard(picture(21, 108));
+    if (!map) throw new Error('keine Tastatur');
+    const tracker = new Tracker(map);
+    const faded = (colour: Color, share: number) => colour.map(c => 10 + (c - 10) * share) as Color;
+    for (let f = 0; f < 60; f++) {
+      const bars = [];
+      if (f >= 15 && f < 30) bars.push({ midi: 72, color: GREEN }); // sharp
+      if (f === 14) bars.push({ midi: 84, color: faded(GREEN, 0.3) }); // blurred, the same moment
+      if (f >= 15 && f < 30) bars.push({ midi: 84, color: GREEN });
+      tracker.add(rowOf(picture(21, 108, bars), map.scanY), f / 30);
+    }
+    const notes = tracker.finish();
+    const start = (midi: number) => notes.find(n => n.midi === midi)?.start ?? 0;
+    expect(Math.abs(start(72) - start(84))).toBeLessThan(0.3 / 30);
+  });
+
   it('splits at middle C when the video has one colour', () => {
     const notes = track([
       { midi: 72, start: 0.5, end: 1, color: GREEN },
@@ -357,6 +374,24 @@ describe('writeDown', () => {
     const changed = writeDown(notes, { octave: 1, tempoFactor: 0.5 });
     expect(changed.piece.hands.right[0].keys).toEqual([72]);
     expect(changed.bpm).toBeCloseTo(plain.bpm / 2);
+  });
+
+  it('does not lose count in a long exact piece with uneven note starts', () => {
+    let seed = 11;
+    const jitter = () => {
+      seed = (seed * 16807) % 2147483647;
+      return (seed / 2147483647 - 0.5) * 0.03;
+    };
+    const eighth = 60 / 130 / 2;
+    const notes = Array.from({ length: 700 }, (_, i) => {
+      const start = 2 + i * eighth + jitter();
+      return note(60 + [0, 4, 7, 12, 7, 4][i % 6], start, start + eighth * 0.85);
+    });
+    const { placed, sure, bpm } = writeDown(notes);
+    expect(sure).toBe(true);
+    expect(bpm).toBeCloseTo(130, 0);
+    const first = [...placed].sort((a, b) => a.start - b.start);
+    first.forEach((p, i) => expect(p.tick - first[0].tick).toBe(i * 24));
   });
 
   it('survives an empty list', () => {

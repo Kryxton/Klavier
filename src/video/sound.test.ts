@@ -48,6 +48,15 @@ describe('judge', () => {
     expect(result?.notes.some(n => n.midi === 70)).toBe(false);
   }, 30000);
 
+  it('leaves a silent note that fits the key: overtones can pose as its neighbour', async () => {
+    const samples = play(tune, SECONDS);
+    const wrong = tune.findIndex((n, i) => i > 20 && n.midi === 69);
+    const read = tune.map((n, i) => (i === wrong ? { ...n, midi: 71 } : n));
+    const result = await judge(read, [], samples);
+    expect(result?.hearing.moved).toBe(0);
+    expect(result?.notes.some(n => n.start === tune[wrong].start && n.midi === 71)).toBe(true);
+  }, 30000);
+
   it('takes a doubtful bar that sounds, and leaves one that does not', async () => {
     const missing = tune[30];
     const read = tune.filter(n => n !== missing);

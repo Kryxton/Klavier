@@ -16,7 +16,7 @@ const LONG_SECONDS = 0.2; // bars this long are surely real
 const NEARBY = 8; // seconds
 const FAINT = 0.65; // share of a real bar's brightness below which something isn't a bar
 const SOLID = 0.6; // share of it that a single pixel needs to belong to a bar
-const NEAR_NOTE = 0.15; // seconds; something this close to a note on its key is part of that note
+const NEAR_NOTE = 0.05; // seconds; something this close to a note on its key is part of that note
 const LETTER_GAP = 0.25; // key widths; many videos write the note's name into the bar, with an outline
 const BRIDGE = 0.12; // seconds a letter may darken a bar for...
 const BRIDGE_LEVEL = 0.25; // ...as long as its lane stays this bright; between two notes it goes dark
@@ -27,6 +27,8 @@ const SHADE_SPREAD = 0.2; // ...and this close in brightness...
 const SHADE_SHARE = 0.7; // ...for this share of them. Sparks vary, a colour in a video doesn't.
 const BRIGHT_SHARE = 0.75; // how far up among all bars seen a solid one lies
 const BLACK_LANE = 0.3; // key widths to each side of a black key's middle
+const LANE = 0.25; // key widths to each side of a bar's middle, for how bright it is
+const EDGE_SECONDS = 0.07; // how far from where it was found a bar's real edge may lie
 
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -291,20 +293,57 @@ export class Tracker {
     return limits;
   }
 
+  // How far the lane around `middle` is from the usual picture, in picture `f`
+  private laneLevel(f: number, middle: number, usual: number[][]) {
+    const reach = Math.max(1, Math.round(this.keys.unit * LANE));
+    const from = Math.max(0, middle - reach);
+    const to = Math.min(this.width - 1, middle + reach);
+    const row = this.rows[f];
+    let sum = 0;
+    for (let x = from; x <= to; x++) {
+      for (let c = 0; c < 3; c++) sum += Math.abs(row[x * 3 + c] - usual[x][c]);
+    }
+    return sum / (to - from + 1);
+  }
+
+  // When a bar really passed the row. A high limit sees its edges a picture or two late, by how much
+  // depends on the bar, and rhythm is made of differences that small: they were enough to lose an
+  // eighth note in a machine-exact piece. The moment its lane crossed half of its brightness is the
+  // same for bright and dark bars, and it lies between two pictures.
+  private passed({ bar }: Found, usual: number[][]) {
+    const middle = Math.round(median(bar.centres));
+    const levels = new Map<number, number>();
+    const level = (f: number) => {
+      if (!levels.has(f)) levels.set(f, this.laneLevel(f, middle, usual));
+      return levels.get(f) as number;
+    };
+    const seen = [];
+    for (let f = bar.first; f <= bar.last; f++) seen.push(level(f));
+    const half = seen.sort((a, b) => a - b)[Math.floor(seen.length * 0.8)] / 2;
+    const crossing = (below: number, above: number) => {
+      const share = Math.min(1, Math.max(0, (half - level(below)) / ((level(above) - level(below)) || 1)));
+      return this.times[below] + share * (this.times[above] - this.times[below]);
+    };
+    let first = bar.first;
+    while (first > 0 && this.times[bar.first] - this.times[first - 1] <= EDGE_SECONDS && level(first - 1) >= half) first--;
+    while (first < bar.last && level(first) < half) first++;
+    let last = bar.last;
+    while (last + 1 < this.rows.length && this.times[last + 1] - this.times[bar.last] <= EDGE_SECONDS && level(last + 1) >= half) last++;
+    while (last > first && level(last) < half) last--;
+    return {
+      start: first > 0 ? crossing(first - 1, first) : this.times[first],
+      end: last + 1 < this.rows.length ? crossing(last + 1, last) : this.times[last],
+    };
+  }
+
   // A letter passing the row darkens a bar for a moment and cuts it in two. Only the lane tells this
   // from two notes in a row: it never goes back to the background in between.
   private bridged(found: Found[], usual: number[][]) {
-    const { unit } = this.keys;
     const staysLit = (a: Found, b: Found) => {
       const middle = Math.round(a.key.x);
-      const reach = Math.max(1, Math.round(unit * 0.25));
       const needed = BRIDGE_LEVEL * Math.max(a.strength, b.strength);
       for (let f = a.bar.last + 1; f < b.bar.first; f++) {
-        let sum = 0;
-        for (let x = Math.max(0, middle - reach); x <= Math.min(this.width - 1, middle + reach); x++) {
-          for (let c = 0; c < 3; c++) sum += Math.abs(this.rows[f][x * 3 + c] - usual[x][c]);
-        }
-        if (sum / (2 * reach + 1) < needed) return false;
+        if (this.laneLevel(f, middle, usual) < needed) return false;
       }
       return true;
     };
@@ -369,9 +408,8 @@ export class Tracker {
       const pool = near.length >= 3 ? near : same;
       return pool.length >= 3 ? median(pool.map(l => l.strength)) : 0;
     };
-    const notes = found
-      .filter(f => f.strength >= FAINT * reference(f))
-      .map(f => ({ midi: f.key.midi, start: this.times[f.bar.first], end: this.times[f.bar.last], hue: f.hue }));
+    const noteOf = (f: Found) => ({ midi: f.key.midi, ...this.passed(f, usual), hue: f.hue });
+    const notes = found.filter(f => f.strength >= FAINT * reference(f)).map(noteOf);
     // Where the bars have a colour, something white or grey is no bar: the player's pause symbol,
     // text faded in over the video
     const coloured = notes.filter(note => note.hue !== null);
@@ -380,7 +418,6 @@ export class Tracker {
     const whole = kept.filter(note => !kept.some(other =>
       other !== note && other.midi === note.midi && other.start <= note.start && other.end >= note.end
       && other.end - other.start > note.end - note.start));
-    const noteOf = (f: Found) => ({ midi: f.key.midi, start: this.times[f.bar.first], end: this.times[f.bar.last], hue: f.hue });
     const free = (f: Found) => {
       const { midi, start, end } = noteOf(f);
       return !whole.some(note => note.midi === midi && note.start < end + NEAR_NOTE && note.end > start - NEAR_NOTE);

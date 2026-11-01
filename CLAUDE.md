@@ -86,18 +86,23 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     pause symbol, text), pieces inside a long bar, pictures without a keyboard (transitions, ads).
     What the first look saw and the second didn't goes to `doubtful`, for the sound to judge.
     Limits in seconds, not frames: browsers deliver other frame rates than a 30 fps test.
+    Note times come from `passed`: when the lane crossed half of the bar's brightness, between two
+    pictures. Where a limit is crossed depends on the bar, and that broke the count of a whole piece.
     Hands by hue only (two shades per hand are common), one colour = split at middle C.
-  - `rhythm.ts`: `follow` for machine-made tutorials (notes within `EXACT`). Otherwise played music:
-    `findPulse` (autocorrelation), `trackBeats` (best chain of beats through the whole piece, four
-    sixteenths to each beat, so no bars of 5 + 5 sixteenths), rolled chords are grouped, short
-    chords held to the next. One voice per hand, always 4/4. The tempo may drift: Cinnamon Girl
-    goes from 1.0 s to about 0.9 s per beat, so 64 BPM and 41 bars are right for it.
+  - `rhythm.ts`: `findTempo` tells machine-made tutorials (notes within `EXACT`) from played music,
+    for which `findPulse` (autocorrelation) gives the beat. **Both are counted by `trackBeats`, the
+    best chain of beats through the whole piece,** with four sixteenths to each beat, far stiffer
+    for machine-made pieces. Never count on from note to note: milliseconds of uneven note starts
+    lost an eighth in the middle of a piece, and every bar line after it. Rolled chords are
+    grouped, short chords held to the next. One voice per hand, always 4/4. The tempo may drift:
+    Cinnamon Girl goes from 1.0 s to about 0.9 s per beat, so 64 BPM and 41 bars are right for it.
   - `sound.ts`: **the picture proposes, the sound decides.** `soundOf` decodes the file's sound
     (no sound or unreadable = null, then the picture stands alone). `judge` finds the delay between
     bar and sound (0.36 s here), learns what each key sounds like from where the picture says it is
     played, splits the sound into keys (non-negative factorisation, sparse templates, 4 to 7 s on
-    a PC) and then: adds doubtful bars that clearly sound, moves silent notes to the neighbour key
-    that sounds, drops silent flickers. Only keys with a learned sound count (bass rumble looks
+    a PC) and then: adds doubtful bars that clearly sound, moves silent notes outside the
+    key to the neighbour that sounds, drops silent flickers. Notes that fit the key stay: overtones
+    pose as neighbours and it had replaced right notes. Only keys with a learned sound count (bass rumble looks
     like rarely used keys). Solid bars it can't hear stay: quiet inner notes can't be heard out.
     Blind test on the real recording: 62 % of notes made wrong repaired or removed, 81 % of hidden
     notes found again, about 1 % of right notes changed; none of the 40 added notes is out of key,
@@ -128,6 +133,12 @@ headless Chrome driven over the DevTools protocol (see Latein's CLAUDE.md), real
 Long heredocs in the Bash tool break: write scripts to the scratchpad.
 
 ## Checking the video reading
+**Yardstick: `node scripts/messlatte.mjs`, 15 s, before every change to `src/video` goes out.** It runs
+what real Chrome saw of the user's recordings (`.messung/<name>/`, gitignored, made with
+`scripts/messlatte-aufnahme.mjs`) through the real reading and compares with `.messung/grenzen.json`.
+It stopped three of my own "fixes". Judge by the written rhythm and by holes, never by the number of
+notes: a fix for one recording once made another worse, and the note count even went up. Reading the
+same notes one frame later or earlier decides whether a bar line holds.
 `scripts/makevideo.mjs` draws a tutorial with known notes as a real H.264 MP4 (`npm i --no-save
 ffmpeg-static`), `scripts/video-check.mjs` uploads it through the page and compares note by note.
 `scripts/recording-check.mjs` runs a real recording through the page with screenshots at all sizes.
