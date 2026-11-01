@@ -97,7 +97,7 @@ const BLUE: Color = [70, 120, 230];
 const DARK_GREEN: Color = [30, 110, 50];
 
 // Bars pass the scan row while their note lasts: a tiny video
-function track(notes: { midi: number; start: number; end: number; color: Color }[], seconds: number, low = 21, high = 108) {
+function trackerOver(notes: { midi: number; start: number; end: number; color: Color }[], seconds: number, low = 21, high = 108) {
   const map = findKeyboard(picture(low, high));
   if (!map) throw new Error('keine Tastatur');
   const tracker = new Tracker(map);
@@ -106,8 +106,10 @@ function track(notes: { midi: number; start: number; end: number; color: Color }
     const bars = notes.filter(n => time >= n.start && time < n.end);
     tracker.add(rowOf(picture(low, high, bars), map.scanY), time);
   }
-  return tracker.finish();
+  return tracker;
 }
+
+const track = (...args: Parameters<typeof trackerOver>) => trackerOver(...args).finish();
 
 describe('Tracker', () => {
   it('finds start, end and key of each bar', () => {
@@ -175,6 +177,30 @@ describe('Tracker', () => {
       { midi: 48, start: 0.5, end: 1, color: BLUE },
     ], 2);
     expect(notes.find(n => n.midi === 73)?.hand).toBe('right');
+  });
+
+  it('keeps two bars apart when sparks join them, and leaves the sparks to the sound', () => {
+    const SPARK: Color = [75, 60, 45];
+    const solid = [0.2, 0.7, 2.2].map(start => ({ midi: 72, start, end: start + 0.4, color: GREEN }));
+    const tracker = trackerOver([
+      ...solid,
+      { midi: 81, start: 1, end: 1.1, color: GREEN },
+      { midi: 82, start: 1.1, end: 1.3, color: SPARK },
+      { midi: 83, start: 1.3, end: 1.6, color: GREEN },
+    ], 3);
+    const notes = tracker.finish();
+    expect(notes.filter(n => n.midi > 72).map(n => n.midi)).toEqual([81, 83]);
+    expect(tracker.doubtful.map(n => n.midi)).toContain(82);
+  });
+
+  it('keeps darker bars on black keys, even with few of them to judge by', () => {
+    const light = [0.2, 0.7, 1.2, 1.7].map(start => ({ midi: 72, start, end: start + 0.4, color: GREEN }));
+    const notes = track([
+      ...light,
+      { midi: 73, start: 2.2, end: 2.6, color: DARK_GREEN },
+      { midi: 75, start: 2.7, end: 3.1, color: DARK_GREEN },
+    ], 4);
+    expect(notes.filter(n => n.midi !== 72).map(n => n.midi)).toEqual([73, 75]);
   });
 
   it('splits at middle C when the video has one colour', () => {

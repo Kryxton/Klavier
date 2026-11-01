@@ -14,6 +14,8 @@ const MIN_SECONDS = 0.03; // shorter flickers aren't notes
 const LONG_SECONDS = 0.2; // bars this long are surely real
 const NEARBY = 8; // seconds
 const FAINT = 0.65; // share of a real bar's brightness below which something isn't a bar
+const SOLID = 0.6; // share of it that a single pixel needs to belong to a bar
+const NEAR_NOTE = 0.15; // seconds; something this close to a note on its key is part of that note
 
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -119,6 +121,7 @@ export class Tracker {
   private times: number[] = [];
   private shown: boolean[] = [];
   private width = 0;
+  doubtful: Detected[] = []; // what looked like a bar but wasn't solid enough: for the sound to judge
 
   constructor(keys: KeyMap) {
     this.keys = keys;
@@ -152,13 +155,13 @@ export class Tracker {
   }
 
   // The stretches of one row that differ from the usual picture; a wide one is several bars side by side
-  private runsOf(row: Uint8Array, usual: number[][]) {
+  private runsOf(row: Uint8Array, usual: number[][], limit: number) {
     const { unit } = this.keys;
     const runs: Run[] = [];
     let from = -1;
     for (let x = 0; x <= this.width; x++) {
       const lit = x < this.width
-        && Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2]) > CHANGE;
+        && Math.abs(row[x * 3] - usual[x][0]) + Math.abs(row[x * 3 + 1] - usual[x][1]) + Math.abs(row[x * 3 + 2] - usual[x][2]) > limit;
       if (lit && from < 0) from = x;
       if (!lit && from >= 0) {
         const width = x - from;
@@ -174,11 +177,11 @@ export class Tracker {
     return runs;
   }
 
-  private followBars(usual: number[][]) {
+  private followBars(usual: number[][], limit: number, shortest = MIN_SECONDS) {
     const done: Bar[] = [];
     let open: Bar[] = [];
     this.rows.forEach((row, f) => {
-      const runs = this.shown[f] ? this.runsOf(row, usual) : [];
+      const runs = this.shown[f] ? this.runsOf(row, usual, limit) : [];
       const next: Bar[] = [];
       for (const run of runs) {
         const bar = open.find(b => {
@@ -203,7 +206,7 @@ export class Tracker {
       open = next;
     });
     done.push(...open);
-    return done.filter(bar => bar.last > bar.first && this.times[bar.last] - this.times[bar.first] >= MIN_SECONDS);
+    return shortest ? done.filter(bar => bar.last > bar.first && this.times[bar.last] - this.times[bar.first] >= shortest) : done;
   }
 
   // Which key a bar stands for: the nearest one. The middle of a bar is steady to a pixel or two,
@@ -217,17 +220,9 @@ export class Tracker {
     return Math.abs(best.x - centre) < unit * 0.6 ? best : null;
   }
 
-  finish(): Detected[] {
-    // Pictures read later to fill holes arrive out of order
-    const order = this.times.map((_, i) => i).sort((a, b) => this.times[a] - this.times[b]);
-    this.rows = order.map(i => this.rows[i]);
-    this.times = order.map(i => this.times[i]);
-    this.shown = order.map(i => this.shown[i]);
-
-    const usual = Array.from({ length: this.width }, (_, x) => usualColour(this.rows, x));
-    const bars = this.followBars(usual);
-
-    const found = bars.flatMap(bar => {
+  // The bars with their key and brightness
+  private measured(bars: Bar[], usual: number[][]) {
+    return bars.flatMap(bar => {
       const key = this.keyOf(median(bar.centres));
       if (!key) return [];
       const colour = [0, 1, 2].map(c => median(bar.colours.map(s => s[c])));
@@ -237,11 +232,35 @@ export class Tracker {
       const strength = changes[Math.floor(changes.length * 0.8)];
       return [{ key, bar, strength, hue: hueOf(colour) }];
     });
+  }
+
+  private isLong(bar: Bar) {
+    return this.times[bar.last] - this.times[bar.first] >= LONG_SECONDS;
+  }
+
+  finish(): Detected[] {
+    // Pictures read later to fill holes arrive out of order
+    const order = this.times.map((_, i) => i).sort((a, b) => this.times[a] - this.times[b]);
+    this.rows = order.map(i => this.rows[i]);
+    this.times = order.map(i => this.times[i]);
+    this.shown = order.map(i => this.shown[i]);
+
+    const usual = Array.from({ length: this.width }, (_, x) => usualColour(this.rows, x));
+    // Sparks and glow between two bars would join them into one wrong note, somewhere between
+    // their keys. A first look shows how bright a solid bar is here, the second only takes that.
+    // With few pictures a short bar shows in just one of them, so the first look takes those too
+    const rough = this.measured(this.followBars(usual, CHANGE, 0), usual);
+    const shades = [false, true].flatMap(black => {
+      const same = rough.filter(f => this.isLong(f.bar) && isBlack(f.key.midi) === black);
+      return same.length ? [median(same.map(f => f.strength))] : [];
+    });
+    const limit = shades.length ? Math.max(CHANGE, SOLID * Math.min(...shades)) : CHANGE;
+    const found = this.measured(this.followBars(usual, limit), usual);
 
     // Sparks and dust behind the bars are much fainter than the bars. Long bars show how bright a
     // real one is, for black and white keys apart, because many videos draw them in two shades.
     // Nearby ones count first, because intros often fade in.
-    const long = found.filter(f => this.times[f.bar.last] - this.times[f.bar.first] >= LONG_SECONDS);
+    const long = found.filter(f => this.isLong(f.bar));
     const reference = (f: (typeof found)[number]) => {
       const same = long.filter(l => isBlack(l.key.midi) === isBlack(f.key.midi));
       const near = same.filter(l => Math.abs(this.times[l.bar.first] - this.times[f.bar.first]) < NEARBY);
@@ -259,6 +278,11 @@ export class Tracker {
     const whole = kept.filter(note => !kept.some(other =>
       other !== note && other.midi === note.midi && other.start <= note.start && other.end >= note.end
       && other.end - other.start > note.end - note.start));
+    const free = (midi: number, start: number, end: number) =>
+      !whole.some(note => note.midi === midi && note.start < end + NEAR_NOTE && note.end > start - NEAR_NOTE);
+    this.doubtful = assignHands(rough
+      .map(f => ({ midi: f.key.midi, start: this.times[f.bar.first], end: this.times[f.bar.last], hue: f.hue }))
+      .filter(note => free(note.midi, note.start, note.end)));
     return assignHands(whole).sort((a, b) => a.start - b.start || a.midi - b.midi);
   }
 }
