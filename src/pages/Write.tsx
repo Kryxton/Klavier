@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Copy, CopyPlus, Plus, Redo2, Settings2, Trash2, Undo2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Copy, Plus, Redo2, Settings2, Trash2, Undo2 } from 'lucide-react';
+import { BarTools, useBarTool } from '../components/BarTools';
 import { Keyboard } from '../components/Keyboard';
 import { Sheet } from '../components/Sheet';
 import { DotIcon, NoteIcon, TieIcon } from '../components/NoteIcons';
@@ -8,9 +9,10 @@ import type { Duration, Hand, Piece } from '../types';
 import { playKey } from '../utils/audio';
 import { cn } from '../utils/cn';
 import {
-  addEvent, appendBarOf, duplicateEvent, moveEvent, removeEvent, removeLast, setLength, setSpelling, setTie, toggleKey,
+  addEvent, duplicateEvent, insertBehind, moveEvent, removeEvent, removeLast, setLength, setSpelling, setTie, toggleKey,
 } from '../utils/edit';
 import { KEY_CHOICES, isBlack, label } from '../utils/notes';
+import { barCount, barOfEvent, barTicks, halves } from '../utils/score';
 
 const DURATIONS: { id: Duration; name: string }[] = [
   { id: 'w', name: 'Ganze' },
@@ -43,8 +45,12 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   const [settings, setSettings] = useState(false);
   // A piece comes out of a video ready, so the tools stay away until something needs correcting
   const [tools, setTools] = useState(!piece.hands.right.length && !piece.hands.left.length);
+  const barTool = useBarTool(piece, change, setFollow);
 
   const event = piece.hands[hand].find(ev => ev.id === selected) ?? null;
+  // Inside a hand a change must not move what stands behind; at its end there is room
+  const inside = Boolean(event) && piece.hands[hand][piece.hands[hand].length - 1]?.id !== event?.id;
+  const halved = event && halves(event);
 
   // Undo can remove the selected event
   useEffect(() => {
@@ -98,12 +104,12 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
     }
   };
 
-  const insertBehind = () => {
+  const addBehind = () => {
     if (!event) return;
     let id = '';
     change(current => {
-      const added = addEvent(current, hand, [], { dur: event.dur, dotted: Boolean(event.dotted) }, event.id);
-      id = added.ev.id;
+      const added = insertBehind(current, hand, event.id);
+      id = added.id;
       return added.piece;
     });
     setSelected(id);
@@ -122,9 +128,14 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
     setFollow(id);
   };
 
+  // A note inside a hand leaves a rest and stays selected, so a key fills it right away
   const remove = () => {
-    if (!event) return;
-    change(current => removeEvent(current, hand, event.id));
+    if (event) change(current => removeEvent(current, hand, event.id));
+  };
+
+  const toggleBars = () => {
+    if (barTool.on) return barTool.close();
+    barTool.open(event ? barOfEvent(piece.hands[hand], event.id, barTicks(piece)) : null);
     setSelected(null);
   };
 
@@ -132,6 +143,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   const shownDotted = event ? Boolean(event.dotted) : dotted;
   const shownTie = event ? Boolean(event.tie) : tie;
   const blackKeys = event?.keys.filter(isBlack) ?? [];
+  const barToggle = barCount(piece) > 0 && <Toggle on={barTool.on} onClick={toggleBars} className="px-3">Takte</Toggle>;
 
   return (
     <div className="h-full flex flex-col">
@@ -149,7 +161,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
           </>
         )}
         <button type="button" aria-label="Einstellungen des Stücks" aria-expanded={settings} onClick={() => setSettings(!settings)} className={cn(ICON_BUTTON, settings && 'text-accent')}><Settings2 {...ICON} /></button>
-        <button type="button" onClick={() => { setTools(!tools); setSelected(null); }} className={TEXT_BUTTON}>
+        <button type="button" onClick={() => { setTools(!tools); setSelected(null); barTool.close(); }} className={TEXT_BUTTON}>
           {tools ? 'Fertig' : 'Korrigieren'}
         </button>
       </header>
@@ -184,30 +196,39 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
 
       <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto md:px-6 md:pb-4">
         <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
-          <Sheet piece={piece} selected={selected} follow={follow} onSelect={select} />
+          <Sheet piece={piece} selected={selected} follow={follow} onSelect={select} bars={barTool.marked} onBar={barTool.on ? barTool.tap : undefined} />
         </div>
       </div>
 
       {tools && (
         <div className="slide-up shrink-0">
           <div className="mx-auto w-full max-w-3xl space-y-2 px-3 py-2">
-            <Choice items={HANDS} value={hand} onChange={h => { setHand(h); setSelected(null); setChord(new Set()); }} />
-            <div className="flex items-center gap-2">
-              <Choice
-                className="flex-1 min-w-0"
-                items={DURATIONS.map(d => ({ id: d.id, name: d.name, label: <NoteIcon duration={d.id} /> }))}
-                value={shownDur}
-                onChange={d => pickLength(d, shownDotted)}
-              />
-              <Toggle on={shownDotted} label="Punktiert" onClick={() => pickLength(shownDur, !shownDotted)} className="w-9 px-0"><DotIcon /></Toggle>
-              <Toggle on={shownTie} label="Mit nächster Note verbinden" onClick={pickTie} className="w-9 px-0"><TieIcon /></Toggle>
-            </div>
+            {barTool.on ? <BarTools tool={barTool}>{barToggle}</BarTools> : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Choice className="flex-1 min-w-0" items={HANDS} value={hand} onChange={h => { setHand(h); setSelected(null); setChord(new Set()); }} />
+                  {barToggle}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Choice
+                    className="flex-1 min-w-0"
+                    items={DURATIONS.map(d => ({ id: d.id, name: d.name, label: <NoteIcon duration={d.id} /> }))}
+                    value={shownDur}
+                    onChange={d => pickLength(d, shownDotted)}
+                  />
+                  <Toggle on={shownDotted} label="Punktiert" onClick={() => pickLength(shownDur, !shownDotted)} className="w-9 px-0"><DotIcon /></Toggle>
+                  <Toggle on={shownTie} label="Mit nächster Note verbinden" onClick={pickTie} className="w-9 px-0"><TieIcon /></Toggle>
+                </div>
+              </>
+            )}
 
-            {event ? (
+            {barTool.on ? null : event ? (
               <>
                 <div className="flex items-center gap-3 min-h-7">
                   <span className="flex-1 min-w-0 text-[13px] text-dim break-words">
-                    {event.keys.length ? event.keys.map(k => label(k, piece.key, event.spell?.[k])).join(' · ') : 'Pause'} – Tasten ändern den Akkord
+                    {event.keys.length
+                      ? `${event.keys.map(k => label(k, piece.key, event.spell?.[k])).join(' · ')} – Tasten ändern den Akkord`
+                      : inside ? 'Pause – „+“ und Löschen verschieben alles dahinter' : 'Pause – Tasten machen eine Note daraus'}
                   </span>
                   {blackKeys.map(k => {
                     const flat = label(k, 0, 'b');
@@ -224,12 +245,13 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
                     );
                   })}
                 </div>
-                <div className="grid grid-cols-7">
+                <div className="grid grid-cols-6">
                   <button type="button" aria-label="Nach links" onClick={() => change(c => moveEvent(c, hand, event.id, -1))} className={ICON_BUTTON}><ArrowLeft {...ICON} /></button>
                   <button type="button" aria-label="Nach rechts" onClick={() => change(c => moveEvent(c, hand, event.id, 1))} className={ICON_BUTTON}><ArrowRight {...ICON} /></button>
-                  <button type="button" aria-label="Note dahinter einfügen" onClick={insertBehind} className={ICON_BUTTON}><Plus {...ICON} /></button>
-                  <button type="button" aria-label="Kopieren" onClick={copyEvent} className={ICON_BUTTON}><Copy {...ICON} /></button>
-                  <button type="button" aria-label="Ganzen Takt ans Ende kopieren" onClick={() => change(c => appendBarOf(c, hand, event.id))} className={ICON_BUTTON}><CopyPlus {...ICON} /></button>
+                  <button type="button" aria-label={inside ? 'Teilen' : 'Kopieren'} disabled={inside && !halved} onClick={copyEvent} className={ICON_BUTTON}>
+                    {inside ? (halved ?? [event]).map((part, i) => <NoteIcon key={i} duration={part.dur} />) : <Copy {...ICON} />}
+                  </button>
+                  <button type="button" aria-label="Note dahinter einfügen" disabled={inside && event.keys.length > 0 && !halved} onClick={addBehind} className={ICON_BUTTON}><Plus {...ICON} /></button>
                   <button type="button" aria-label="Löschen" onClick={remove} className={cn(ICON_BUTTON, 'text-danger')}><Trash2 {...ICON} /></button>
                   <button type="button" aria-label="Auswahl beenden" onClick={() => setSelected(null)} className={ICON_BUTTON}><Check {...ICON} /></button>
                 </div>
@@ -248,7 +270,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
             )}
           </div>
 
-          <Keyboard marked={event ? new Set(event.keys) : chord} reveal={event?.keys[0]} keySig={piece.key} onKey={tapKey} className="h-24 sm:h-32" />
+          {!barTool.on && <Keyboard marked={event ? new Set(event.keys) : chord} reveal={event?.keys[0]} keySig={piece.key} onKey={tapKey} className="h-24 sm:h-32" />}
         </div>
       )}
     </div>
