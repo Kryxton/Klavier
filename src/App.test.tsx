@@ -5,12 +5,14 @@ import type { Hand, Piece } from './types';
 import { audioClock } from './utils/audio';
 import { barCount } from './utils/score';
 import { loadLibrary } from './utils/storage';
+import { useUpdateAvailable } from './utils/update';
 
 // Sound and the VexFlow score need a real browser; both are checked there
 vi.mock('./utils/audio', () => ({
   playKey: vi.fn(), unlockAudio: vi.fn(),
   audioClock: { now: () => 0, play: vi.fn(), click: vi.fn(), silence: vi.fn() },
 }));
+vi.mock('./utils/update', () => ({ useUpdateAvailable: vi.fn(() => false) }));
 vi.mock('./components/Sheet', () => ({
   PrintSheet: ({ piece }: { piece: Piece }) => <p>Druckansicht {piece.title}</p>,
   Sheet: ({ piece, onSelect, onBar }: { piece: Piece; onSelect?: (hand: Hand, id: string) => void; onBar?: (bar: number) => void }) => (
@@ -298,6 +300,23 @@ describe('App', () => {
     tap('Notenblatt');
     tap('Korrigieren');
     expect(screen.queryByRole('button', { name: 'Drucken' })).toBeNull();
+  });
+
+  it('offers a new version without forcing it', () => {
+    vi.mocked(useUpdateAvailable).mockReturnValueOnce(true);
+    render(<App />);
+    expect(screen.getByRole('button', { name: /Neue Version/ })).toBeTruthy();
+  });
+
+  it('keeps the screen on while practising and lets go afterwards', async () => {
+    const release = vi.fn(async () => {});
+    const request = vi.fn(async () => ({ release }));
+    Object.defineProperty(navigator, 'wakeLock', { value: { request }, configurable: true });
+    startPractice();
+    await waitFor(() => expect(request).toHaveBeenCalledWith('screen'));
+    tap('Stücke');
+    await waitFor(() => expect(release).toHaveBeenCalled());
+    Object.defineProperty(navigator, 'wakeLock', { value: undefined, configurable: true });
   });
 
   it('asks before deleting a piece', () => {

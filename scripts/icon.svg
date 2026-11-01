@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The app in one picture: a falling note lands on its key. The PNGs in public/ are renders of this. -->
+  <rect width="512" height="512" fill="#17181b"/>
+  <g fill="#f6f3ec">
+    <rect x="51" y="296" width="77.2" height="168" rx="9"/>
+    <rect x="134.2" y="296" width="77.2" height="168" rx="9"/>
+    <rect x="217.4" y="296" width="77.2" height="168" rx="9" fill="#e63946"/>
+    <rect x="300.6" y="296" width="77.2" height="168" rx="9"/>
+    <rect x="383.8" y="296" width="77.2" height="168" rx="9"/>
+  </g>
+  <g fill="#17181b">
+    <rect x="107.2" y="296" width="48" height="104" rx="6"/>
+    <rect x="190.4" y="296" width="48" height="104" rx="6"/>
+    <rect x="356.8" y="296" width="48" height="104" rx="6"/>
+  </g>
+  <rect x="226" y="62" width="60" height="214" rx="15" fill="#e63946"/>
+</svg>

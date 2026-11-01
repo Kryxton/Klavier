@@ -10,6 +10,7 @@ import { cn } from './utils/cn';
 import { newPiece } from './utils/edit';
 import { smoothly } from './utils/smooth';
 import { loadLibrary, mergePieces, saveLibrary, type Library } from './utils/storage';
+import { useUpdateAvailable } from './utils/update';
 
 type Page = 'pieces' | 'import' | 'write' | 'practice';
 const NAV: { id: Page; label: string; icon: typeof ListMusic }[] = [
@@ -27,6 +28,7 @@ export default function App() {
   const [saved, setSaved] = useState(true);
   const [steps, setSteps] = useState<{ past: Piece[]; future: Piece[] }>({ past: [], future: [] });
   const libraryNow = useRef(library);
+  const update = useUpdateAvailable();
 
   useEffect(() => {
     libraryNow.current = library;
@@ -96,7 +98,7 @@ export default function App() {
   const activeTab = Math.max(0, NAV.findIndex(item => item.id === page));
 
   return (
-    <div className="h-dvh flex flex-col-reverse lg:flex-row bg-ink text-text">
+    <div className="h-dvh flex flex-col-reverse pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] lg:flex-row bg-ink text-text">
       <nav className="shrink-0 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] lg:w-56 lg:border-t-0 lg:border-r lg:p-3 lg:pb-3">
         <p className="hidden px-3 pt-2 pb-4 text-[20px] font-bold tracking-tight lg:block">Klavier</p>
         <div className="relative grid grid-cols-3 lg:grid-cols-1">
@@ -121,7 +123,12 @@ export default function App() {
           })}
         </div>
       </nav>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pb-[env(safe-area-inset-bottom)]">
+        {update && (
+          <button type="button" onClick={() => location.reload()} className="shrink-0 bg-text px-3 py-2 text-left text-sm text-white">
+            Neue Version da. Zum Laden tippen.
+          </button>
+        )}
         {!saved && (
           <p role="alert" className="shrink-0 bg-accent px-3 py-2 text-sm text-white">
             Speichern im Browser hat nicht geklappt. Lade unter „Stücke“ ein Backup herunter.

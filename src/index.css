@@ -53,8 +53,11 @@ body {
   overscroll-behavior: none;
 }
 
-/* Everything tappable gives way a little under the finger */
+/* Everything tappable gives way a little under the finger; holding one down selects nothing */
 button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   transition: transform 140ms var(--ease-out-soft), background-color 180ms ease, color 180ms ease, opacity 180ms ease;
 }
 button:active:not(:disabled) {

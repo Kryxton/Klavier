@@ -8,6 +8,7 @@ import { cn } from '../utils/cn';
 import type { Bars } from '../utils/edit';
 import { barCount, barTicks } from '../utils/score';
 import { usePlayer, type HandChoice } from '../utils/usePlayer';
+import { useScreenAwake } from '../utils/wakeLock';
 
 type View = 'falling' | 'sheet';
 const VIEWS: { id: View; label: string }[] = [
@@ -30,6 +31,7 @@ export function Practice({ piece }: { piece: Piece }) {
   // Bars are tapped on the notes, so the falling view steps aside until the loop is set
   const [picking, setPicking] = useState<{ first: number | null; back: View } | null>(null);
   const [bar, setBar] = useState(1);
+  useScreenAwake();
 
   const bars = barCount(piece);
   const ticks = barTicks(piece);
