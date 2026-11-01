@@ -9,6 +9,7 @@ export interface Detected {
   hand: Hand;
 }
 
+const BACKGROUND_SAMPLE = 1500; // pictures
 const CHANGE = 90; // sum of the colour channels: how far from the usual picture counts as a bar
 const MIN_SECONDS = 0.03; // shorter flickers aren't notes
 const LONG_SECONDS = 0.2; // bars this long are surely real
@@ -36,16 +37,15 @@ const median = (values: number[]) => {
 // held a lot is under a bar in half of the pictures, in one colour or another. Colours are counted
 // in coarse bins, on two shifted grids: a background right on a bin border would otherwise split
 // in two and lose against a bar.
-function usualColour(frames: Uint8Array[], place: number) {
+function usualColour(frames: Uint8Array[], place: number, counts: Uint16Array) {
   let best = [0, 0, 0];
   let bestCount = 0;
   for (const shift of [0, 8]) {
-    const counts = new Map<number, number>();
+    counts.fill(0);
     for (const frame of frames) {
       const bin = (c: number) => (Math.min(255, frame[place * 3 + c] + shift)) >> 4;
       const id = bin(0) << 8 | bin(1) << 4 | bin(2);
-      const count = (counts.get(id) ?? 0) + 1;
-      counts.set(id, count);
+      const count = ++counts[id];
       if (count > bestCount) {
         bestCount = count;
         best = [(id >> 8) & 15, (id >> 4) & 15, id & 15].map(b => b * 16 + 8 - shift);
@@ -347,7 +347,11 @@ export class Tracker {
     this.times = order.map(i => this.times[i]);
     this.shown = order.map(i => this.shown[i]);
 
-    const usual = Array.from({ length: this.width }, (_, x) => usualColour(this.rows, x));
+    // A sample of the pictures shows the background as well as all of them, in a fraction of the time
+    const every = Math.ceil(this.rows.length / BACKGROUND_SAMPLE);
+    const sample = this.rows.filter((_, f) => f % every === 0);
+    const counts = new Uint16Array(4096);
+    const usual = Array.from({ length: this.width }, (_, x) => usualColour(sample, x, counts));
     // Sparks and glow between two bars would join them into one wrong note, somewhere between
     // their keys. A first look shows how bright a solid bar is here, the second only takes that.
     // With few pictures a short bar shows in just one of them, so the first look takes those too

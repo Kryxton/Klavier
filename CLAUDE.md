@@ -40,8 +40,18 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   it up; notes are placed on the audio clock (`LOOKAHEAD`), so timing stays exact. `audio.ts` = Tone
   (Salamander samples, synth until they have arrived), `usePlayer.ts` = the React side.
 - `components/Sheet.tsx`: VexFlow. Both hands go through one `Formatter`, so notes that sound together
-  stand above each other. Redraws only when notes or width change; selected and sounding notes just
-  switch a class. A tap goes to the nearest note within `TAP_RADIUS`, because noteheads are small.
+  stand above each other. **Long pieces are drawn line by line:** every line is its own SVG, made
+  when it nears the screen (`IntersectionObserver`), one to a frame, so 119 bars open in 90 ms instead
+  of blocking 500 and an edit redraws only those. Bar widths are estimated (`roomOf`, on the wide
+  side), because asking VexFlow means building every note first. Ties over line ends are drawn as
+  half ties from each side. Selected and sounding notes switch a class on just those notes. A tap
+  goes to the nearest note within `TAP_RADIUS`, because noteheads are small.
+- `components/Falling.tsx`: the falling notes, dark stage on the black lacquer of a piano, keys and
+  bars in one canvas (no React per note, no drift between them). What doesn't move is drawn once
+  into layers. Only notes in view are looked at (`soundsBetween`, also used by `usePlayer`). Slim bars
+  (`WHITE_BAR`), keys never wider than `WIDEST_KEY`: wider screens show more keys, not fat ones.
+  Colours are in the `@theme static` block: Tailwind drops tokens no class uses, and `addColorStop`
+  throws on an empty string.
 - Pages: `Pieces` (home, list, backup file), `Import` (video to piece), `Write` = „Notenblatt“: the
   score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord, „+“
   puts a rest behind the note to fill), `Practice` (Noten, Fallend as the extra).
@@ -52,9 +62,14 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
     landing notes flash and glow.
   - `tracker.ts`: follows whole bars through the row, the key comes from the bar's middle (exact
     to a pixel or two; widths change with glow). Background = most frequent colour per pixel.
-    Two looks: the first learns how bright a solid bar is here, the second takes only pixels with
-    `SOLID` of that, because sparks between two bars joined them into one wrong note somewhere
-    between their keys (that was the "comically wrong" sound: 21 notes out of key, now 3).
+    Two looks: the first learns how bright a solid bar is here (black and white keys apart), the
+    second takes only pixels with `SOLID` of that, because sparks between two bars joined them into
+    one wrong note somewhere between their keys (that was the "comically wrong" sound: 21 notes out
+    of key, now 3). Many videos write the note's name into the bar: small gaps across a bar are
+    closed (`LETTER_GAP`), gaps along it bridged (`bridged`: the lane never falls back to background,
+    `BRIDGE_LEVEL` tells that apart from two notes in a row), the colour comes from the most
+    colourful pixel. `secondShade`: some videos draw one hand's black keys as dark as sparks, but
+    always alike (one colour, one brightness); sparks vary. Sparks must never pass that test.
     Dropped: faint things (dust, compared with long bars nearby), colourless things (the player's
     pause symbol, text), pieces inside a long bar, pictures without a keyboard (transitions, ads).
     What the first look saw and the second didn't goes to `doubtful`, for the sound to judge.
@@ -68,7 +83,7 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   - `sound.ts`: **the picture proposes, the sound decides.** `soundOf` decodes the file's sound
     (no sound or unreadable = null, then the picture stands alone). `judge` finds the delay between
     bar and sound (0.36 s here), learns what each key sounds like from where the picture says it is
-    played, splits the sound into keys (non-negative factorisation, sparse templates, 6 to 10 s on
+    played, splits the sound into keys (non-negative factorisation, sparse templates, 4 to 7 s on
     a PC) and then: adds doubtful bars that clearly sound, moves silent notes to the neighbour key
     that sounds, drops silent flickers. Only keys with a learned sound count (bass rumble looks
     like rarely used keys). Solid bars it can't hear stay: quiet inner notes can't be heard out.
@@ -109,8 +124,14 @@ what the reading sees. Compare with the sound (ffmpeg extracts it): notes out of
 denies pointed straight at the sparks. Stop the dev server before `npm test`: running both breaks
 vitest with "Cannot read properties of undefined (reading 'config')". Real recordings found everything generated ones didn't, always try one.
 Don't record test videos with MediaRecorder: the file had a 13 s hole that looked like a bug.
-The user's recording (Cinnamon Girl, portrait, HEVC, one bar colour, hands, smoke) lies in the
-project folder; video files are gitignored and must stay out of this public repo.
+The user's recordings lie in the project folder; video files are gitignored and must stay out of
+this public repo. Cinnamon Girl (portrait, one bar colour, hands, smoke, played freely) and a
+landscape recording rotated by metadata (machine-exact, two hand colours, letters in the bars, dark
+bars on some black keys, 130 BPM, 1600 notes). Any change to the tracker must be checked on both.
+**To find missing notes without an original,** read a second row higher up: the same bars pass it
+later, so what only one row sees is a mistake (the second recording: 1590 of 1612 agree). Rows saved
+from real Chrome replay the tracker in seconds instead of minutes.
+**Speed:** check with a long piece and `Emulation.setCPUThrottlingRate` 4; a PC hides everything.
 
 ## Open
 - **Pitch is now checked by the sound, rhythm is still an estimate.** For played music the note
@@ -118,7 +139,8 @@ project folder; video files are gitignored and must stay out of this public repo
   the bar line can land two beats off from run to run. The sound isn't used for timing yet (its
   long look is too blurred for that). Needs the user's ear, then more recordings.
 - Not tried in Safari on iPhone/iPad at all: neither the frame rate nor `decodeAudioData` on these
-  files. Reading takes about the length of the video, plus 10 to 30 s for the sound.
+  files. Reading takes about the length of the video, plus 5 to 30 s for the sound. Only checked
+  with a throttled CPU in Chrome: falling notes 60 fps, score while playing 47.
 - Cloud sync (same Supabase project, own table, SQL file the user runs).
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
   A YouTube link was discussed and declined: reading the running tab works only on the PC, a
