@@ -32,8 +32,10 @@ const BEAT_VALUES = [2, 4, 8];
 
 const ICON = { strokeWidth: 1.75, className: 'w-5 h-5' };
 
+type Change = (next: (piece: Piece) => Piece) => void;
+
 export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
-  piece: Piece; change: (next: (piece: Piece) => Piece) => void; undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean;
+  piece: Piece; change: Change; undo: () => void; redo: () => void; canUndo: boolean; canRedo: boolean;
 }) {
   const [hand, setHand] = useState<Hand>('right');
   const [dur, setDur] = useState<Duration>('q');
@@ -187,6 +189,10 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
   const shownDotted = event ? Boolean(event.dotted) : dotted;
   const shownTie = event ? Boolean(event.tie) : tie;
   const blackKeys = event?.keys.filter(isBlack) ?? [];
+  // Over the keys when no note is chosen: what a tap does, or the chord so far
+  const keysHint = instant ? 'Jede Taste wird sofort eingetragen'
+    : chord.size ? [...chord].sort((a, b) => a - b).map(k => label(k, piece.key)).join(' · ')
+    : 'Tippe Tasten oder eine Note im Notenblatt';
   const barToggle = (barTool.on || barCount(piece) > 0) && <Toggle on={barTool.on} onClick={toggleBars} className="px-3">Takte</Toggle>;
 
   return (
@@ -220,33 +226,8 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
         </div>
       )}
 
-      {settings && (
-        <div className="slide-up shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-3 md:px-6">
-          <label className={cn(LABEL, 'flex flex-col gap-1')}>Takt
-            <div className="flex items-center gap-1 text-text">
-              <select aria-label="Schläge pro Takt" value={piece.beats} onChange={e => change(p => ({ ...p, beats: Number(e.target.value) }))} className={cn(INPUT, 'flex-1')}>
-                {BEATS.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
-              /
-              <select aria-label="Notenwert" value={piece.beatValue} onChange={e => change(p => ({ ...p, beatValue: Number(e.target.value) }))} className={cn(INPUT, 'flex-1')}>
-                {BEAT_VALUES.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
-            </div>
-          </label>
-          <label className={cn(LABEL, 'flex flex-col gap-1')}>Tempo
-            <input
-              type="number" min={20} max={300} value={piece.bpm}
-              onChange={e => change(p => ({ ...p, bpm: Math.max(1, Number(e.target.value) || 1) }))}
-              className={INPUT}
-            />
-          </label>
-          <label className={cn(LABEL, 'flex flex-col gap-1 col-span-2')}>Tonart
-            <select value={piece.key} onChange={e => change(p => ({ ...p, key: Number(e.target.value) }))} className={INPUT}>
-              {KEY_CHOICES.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
-            </select>
-          </label>
-        </div>
-      )}
+      {settings && <PieceSettings piece={piece} change={change} />}
+
 
       <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto md:px-6 md:pt-2 md:pb-4">
         <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
@@ -313,22 +294,59 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
                 </div>
               </>
             ) : (
-              <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
-                <button type="button" disabled={!chord.size} onClick={() => write([...chord])} className={cn(BUTTON, 'min-h-10 px-2 text-sm')}>
-                  {chord.size > 1 ? `Akkord (${chord.size}) eintragen` : 'Eintragen'}
-                </button>
-                <Toggle on={instant} onClick={() => { setInstant(!instant); setChord(new Set()); }} className="min-h-10">Sofort</Toggle>
-                <button type="button" onClick={() => write([])} className="min-h-10 rounded-control bg-track px-3 text-[13px] font-medium text-dim">Pause</button>
-                <button type="button" aria-label="Letzte Note entfernen" disabled={!piece.hands[hand].length} onClick={() => change(c => removeLast(c, hand))} className={ICON_BUTTON}>
-                  <Trash2 {...ICON} />
-                </button>
-              </div>
+              <>
+                {/* A line as over a chosen note, so the tools keep their height when one is tapped */}
+                <p className="min-h-7 text-[13px] leading-7 text-dim truncate">
+                  {keysHint}
+                </p>
+                <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2">
+                  <button type="button" disabled={!chord.size} onClick={() => write([...chord])} className={cn(BUTTON, 'min-h-10 px-2 text-sm')}>
+                    Eintragen
+                  </button>
+                  <Toggle on={instant} onClick={() => { setInstant(!instant); setChord(new Set()); }} className="min-h-10">Sofort</Toggle>
+                  <button type="button" onClick={() => write([])} className="min-h-10 rounded-control bg-track px-3 text-[13px] font-medium text-dim">Pause</button>
+                  <button type="button" aria-label="Letzte Note entfernen" disabled={!piece.hands[hand].length} onClick={() => change(c => removeLast(c, hand))} className={ICON_BUTTON}>
+                    <Trash2 {...ICON} />
+                  </button>
+                </div>
+              </>
             )}
           </div>
 
           {!barTool.on && <Keyboard marked={event ? new Set(event.keys) : chord} reveal={event?.keys[0]} keySig={piece.key} onKey={tapKey} className="h-24 sm:h-32" />}
         </div>
       )}
+    </div>
+  );
+}
+
+// Time signature, tempo and key of the piece, under the gear in the header
+function PieceSettings({ piece, change }: { piece: Piece; change: Change }) {
+  return (
+    <div className="slide-up shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-3 md:px-6">
+      <label className={cn(LABEL, 'flex flex-col gap-1')}>Takt
+        <div className="flex items-center gap-1 text-text">
+          <select aria-label="Schläge pro Takt" value={piece.beats} onChange={e => change(p => ({ ...p, beats: Number(e.target.value) }))} className={cn(INPUT, 'flex-1')}>
+            {BEATS.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          /
+          <select aria-label="Notenwert" value={piece.beatValue} onChange={e => change(p => ({ ...p, beatValue: Number(e.target.value) }))} className={cn(INPUT, 'flex-1')}>
+            {BEAT_VALUES.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+      </label>
+      <label className={cn(LABEL, 'flex flex-col gap-1')}>Tempo
+        <input
+          type="number" min={20} max={300} value={piece.bpm}
+          onChange={e => change(p => ({ ...p, bpm: Math.max(1, Number(e.target.value) || 1) }))}
+          className={INPUT}
+        />
+      </label>
+      <label className={cn(LABEL, 'flex flex-col gap-1 col-span-2')}>Tonart
+        <select value={piece.key} onChange={e => change(p => ({ ...p, key: Number(e.target.value) }))} className={INPUT}>
+          {KEY_CHOICES.map(k => <option key={k.id} value={k.id}>{k.label}</option>)}
+        </select>
+      </label>
     </div>
   );
 }

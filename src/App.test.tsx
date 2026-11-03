@@ -76,7 +76,8 @@ describe('App', () => {
     tap('C4');
     tap('E4');
     tap('Halbe');
-    tap(/Akkord \(2\) eintragen/);
+    expect(screen.getByText('C4 · E4')).toBeTruthy();
+    tap('Eintragen');
     expect(notes().right).toMatchObject([{ keys: [60, 64], dur: 'h' }]);
   });
 
