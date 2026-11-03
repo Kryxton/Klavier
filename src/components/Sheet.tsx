@@ -2,9 +2,11 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { createPortal } from 'react-dom';
 import { Accidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, StaveTie, Voice } from 'vexflow';
 import type { Hand, Piece } from '../types';
+import { cn } from '../utils/cn';
 import { titleOf, type Bars } from '../utils/edit';
 import { keyName, keySignature, signFor, spell } from '../utils/notes';
 import { paginate } from '../utils/print';
+import { glide } from '../utils/smooth';
 import { barTicks, toBars, type Printed } from '../utils/score';
 
 type Clef = 'treble' | 'bass';
@@ -268,6 +270,16 @@ function drawLine(host: HTMLElement, { piece, bars }: Measured, page: Page, line
   return drawn;
 }
 
+// Everything a line's picture is drawn from, as text: the same text, the same picture. An edit
+// changes one or two lines; only those are drawn again.
+function lineKey({ piece, bars }: Measured, page: Page, lineIndex: number) {
+  const line = page.lines[lineIndex];
+  const first = line.bars[0];
+  const last = line.bars[line.bars.length - 1];
+  const ties = (['right', 'left'] as const).map(hand => [neighbour(bars, hand, first, -1), neighbour(bars, hand, last, 1)]);
+  return JSON.stringify([page.scale, page.longest, line, piece.key, piece.beats, piece.beatValue, bars.length, line.bars.map(i => bars[i]), ties]);
+}
+
 const scrollerOf = (element: HTMLElement) => {
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
     if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) return parent;
@@ -285,6 +297,7 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
 }) {
   const host = useRef<HTMLDivElement>(null);
   const notes = useRef(new Map<number, DrawnNote[]>());
+  const drawnAs = useRef(new Map<number, string>()); // lineKey of each drawn line
   const byId = useRef(new Map<string, DrawnNote[]>());
   const lit = useRef<{ selected?: string | null; active?: ReadonlySet<string>; doubts?: ReadonlySet<string> }>({ selected, active, doubts });
   const shown = useRef(new Set<string>());
@@ -293,7 +306,7 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
   const [drawCount, setDrawCount] = useState(0);
   const { hands, key, beats, beatValue } = piece;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const box = host.current;
     if (!box) return;
     const observer = new ResizeObserver(() => setWidth(box.clientWidth));
@@ -319,24 +332,40 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
     for (const line of notes.current.values()) line.forEach(mark);
   }, [doubts, drawCount]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const box = host.current;
     if (!box || !page) return;
-    notes.current.clear();
+    const keys = page.lines.map((_, i) => lineKey(measured, page, i));
+    const redrawing = notes.current.size > 0;
+    notes.current = new Map([...notes.current].filter(([i]) => drawnAs.current.get(i) === keys[i]));
+    drawnAs.current = new Map([...drawnAs.current].filter(([i]) => notes.current.has(i)));
     byId.current.clear();
-    for (const line of box.children) line.innerHTML = '';
+    const remember = (note: DrawnNote) => byId.current.set(note.id, [...(byId.current.get(note.id) ?? []), note]);
+    for (const line of notes.current.values()) line.forEach(remember);
 
     const show = (element: HTMLElement) => {
       const index = Number(element.dataset.line);
       if (notes.current.has(index)) return;
       const drawn = drawLine(element, measured, page, index);
       notes.current.set(index, drawn);
+      drawnAs.current.set(index, keys[index]);
       for (const note of drawn) {
-        byId.current.set(note.id, [...(byId.current.get(note.id) ?? []), note]);
+        remember(note);
         mark(note);
       }
     };
-    // One line to a picture, in the order they came, so the page keeps moving while it fills
+    // After an edit the changed lines on the screen are drawn before the browser shows anything,
+    // so they don't go blank for a few pictures; the others wait until they come near again
+    const root = scrollerOf(box);
+    const view = root ? root.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    for (const line of box.children as HTMLCollectionOf<HTMLElement>) {
+      if (notes.current.has(Number(line.dataset.line))) continue;
+      const { top, bottom } = line.getBoundingClientRect();
+      if (redrawing && bottom > view.top && top < view.bottom) show(line);
+      else line.innerHTML = '';
+    }
+
+    // One line to a picture, in the order they came near, so the page keeps moving while it fills
     const waiting: HTMLElement[] = [];
     let frame = 0;
     const next = () => {
@@ -350,7 +379,7 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
     const observer = new IntersectionObserver(entries => {
       for (const entry of entries) if (entry.isIntersecting) waiting.push(entry.target as HTMLElement);
       if (waiting.length && !frame) frame = requestAnimationFrame(next);
-    }, { root: scrollerOf(box), rootMargin: `${DRAW_AHEAD}px 0px` });
+    }, { root, rootMargin: `${DRAW_AHEAD}px 0px` });
     for (const line of box.children) observer.observe(line);
     return () => {
       observer.disconnect();
@@ -371,7 +400,7 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
     // Every note would mean working out the page again; only a new line has to move
     if (line === followed.current) return;
     followed.current = line;
-    if (line >= 0) host.current?.children[line]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (line >= 0) host.current?.children[line]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: glide() });
   }, [follow, page, drawCount]);
 
   const tap = (x: number, y: number) => {
@@ -396,7 +425,7 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
   const scale = page?.scale ?? 1;
   return (
     <div className="relative">
-      <div ref={host} data-testid="sheet" className="sheet w-full" onClick={e => tap(e.clientX, e.clientY)}>
+      <div ref={host} data-testid="sheet" className={cn('sheet w-full', !active && 'sheet-soft')} onClick={e => tap(e.clientX, e.clientY)}>
         {page?.lines.map((line, i) => <div key={i} data-line={i} style={{ height: line.height * page.scale, width: page.longest * page.scale }} />)}
       </div>
       {boxes.map(box => (
