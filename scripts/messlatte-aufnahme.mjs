@@ -60,14 +60,20 @@ await send('DOM.setFileInputFiles', { nodeId: node.result.nodeId, files: [VIDEO]
 
 const info = JSON.parse(await run(`(async () => {
   const { Tracker } = await import('/src/video/tracker.ts');
+  const { StageReader } = await import('/src/video/stage.ts');
   const { readVideo } = await import('/src/video/readVideo.ts');
-  const finish = Tracker.prototype.finish;
-  Tracker.prototype.finish = function () { window.__t = this; return finish.call(this); };
+  // The row reading runs always, but where the stage finds bar lines its result isn't asked for
+  const add = Tracker.prototype.add;
+  Tracker.prototype.add = function (...args) { window.__t = this; return add.apply(this, args); };
+  const finishStage = StageReader.prototype.finish;
+  StageReader.prototype.finish = function () { window.__stage = this; return finishStage.call(this); };
   const result = await readVideo(document.getElementById('probe').files[0], () => {});
   const t = window.__t;
   return JSON.stringify({ count: result.notes.length, hearing: result.hearing, frames: t.times.length, width: t.width, times: t.times, keys: t.keys, shown: t.shown });
 })()`));
 writeFileSync(join(OUT, 'info.json'), JSON.stringify(info));
+// What the stage reading saw: its bar lines and bars, a few times a second
+writeFileSync(join(OUT, 'stage.json'), await run('JSON.stringify(window.__stage.looks)'));
 console.log(NAME, 'Noten', info.count, 'Bilder', info.frames, 'pro Sekunde', (info.frames / info.times.at(-1)).toFixed(1));
 
 const inChunks = async (expression, chunks, chunk) => {

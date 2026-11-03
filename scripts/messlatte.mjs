@@ -19,9 +19,25 @@ const ROOT = resolve(import.meta.dirname, '..');
 const DATA = join(ROOT, '.messung');
 const bundle = join(DATA, 'lesen.mjs');
 const entry = join(DATA, 'lesen-eintrag.ts');
-writeFileSync(entry, ['tracker', 'sound', 'rhythm', 'hands'].map(name => `export * from '${join(ROOT, 'src/video', name).replaceAll('\\', '/')}';`).join('\n'));
+writeFileSync(entry, ['tracker', 'sound', 'rhythm', 'hands', 'stage'].map(name => `export * from '${join(ROOT, 'src/video', name).replaceAll('\\', '/')}';`).join('\n'));
 execFileSync(process.execPath, [join(ROOT, 'node_modules/esbuild/bin/esbuild'), entry, '--bundle', '--platform=node', '--format=esm', `--outfile=${bundle}`, '--log-level=warning'], { stdio: 'inherit' });
-const { Tracker, judge, writeDown, findKey, handLine } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
+const { Tracker, StageReader, STAGE_EVERY, judge, writeDown, findKey, handLine } = await import(`${pathToFileURL(bundle).href}?${Date.now()}`);
+
+// The page looks at the stage in the pictures it gets, at most every STAGE_EVERY seconds: with only
+// every n-th picture, each picture that comes late enough takes the saved look nearest to it
+const stageLooks = (looks, times, every) => {
+  const chosen = new Set();
+  let last = -Infinity;
+  let i = 0;
+  for (const time of times.filter((_, f) => f % every === 0).sort((a, b) => a - b)) {
+    if (time - last < STAGE_EVERY) continue;
+    while (i + 1 < looks.length && Math.abs(looks[i + 1].time - time) <= Math.abs(looks[i].time - time)) i++;
+    if (Math.abs(looks[i].time - time) > 0.1) continue;
+    chosen.add(i);
+    last = time;
+  }
+  return looks.filter((_, k) => chosen.has(k));
+};
 
 const LEN = { w: 192, h: 96, q: 48, 8: 24, 16: 12, 32: 6 };
 const ticksOf = e => LEN[e.dur] * (e.dotted ? 1.5 : 1);
@@ -61,7 +77,17 @@ function replay(dir, every) {
       return sum / 7 > 120;
     });
   };
-  return { notes: tracker.finish(), doubtful: tracker.doubtful, fullKeyboard: info.keys.fullKeyboard, barSeen };
+  // As in the page: where the stage reading found bar lines, its notes count
+  let staged = null;
+  if (existsSync(join(dir, 'stage.json'))) {
+    const stage = new StageReader(info.keys);
+    stage.looks = stageLooks(JSON.parse(readFileSync(join(dir, 'stage.json'), 'utf8')), info.times, every);
+    staged = stage.finish();
+  }
+  return {
+    notes: staged?.notes ?? tracker.finish(), doubtful: staged ? [] : tracker.doubtful, bars: staged?.bars ?? null,
+    fullKeyboard: info.keys.fullKeyboard, barSeen,
+  };
 }
 
 // A hole: the keys played one pattern before and one after agree, and here there is nothing
@@ -146,14 +172,14 @@ for (const name of readdirSync(DATA, { withFileTypes: true }).filter(d => d.isDi
   if (!existsSync(join(dir, 'rows.bin'))) continue;
   const truth = existsSync(join(dir, 'wahrheit.json')) ? JSON.parse(readFileSync(join(dir, 'wahrheit.json'), 'utf8')) : {};
   const began = Date.now();
-  const { notes, doubtful, barSeen } = replay(dir, every);
+  const { notes, doubtful, bars, barSeen } = replay(dir, every);
   const raw = readFileSync(join(dir, 'rec11.f32'));
   const samples = new Float32Array(raw.buffer, raw.byteOffset, raw.length / 4);
   const checked = await judge(notes, doubtful, samples);
   const final = checked?.notes ?? notes;
   const key = findKey(final);
   const scale = [0, 2, 4, 5, 7, 9, 11].map(s => ((key * 7 + s) % 12 + 12) % 12);
-  const reading = writeDown(final);
+  const reading = writeDown(final, { bars });
   const result = {
     noten: final.length,
     bildNoten: notes.length,
