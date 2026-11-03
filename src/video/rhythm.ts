@@ -33,6 +33,8 @@ const FOUR_BAR = 16;
 const CLEAR_BASS = 4; // times more often than by chance: the bass really marks the bars
 const CLEARER = 1.5; // how much clearer three has to be than four
 const ENOUGH_BARS = 8; // shorter pieces don't show their bars
+const SHORT_BAR = 0.25; // a bar this much shorter or longer than those around it is a bar of another length
+const BAR_FIT = 0.2; // grid steps a note start may lie off when the steps of a bar are chosen
 const SIX_EIGHT_FROM = 110; // quarters a minute; running eighths this fast feel like two beats, not three
 
 // Follows the music through its note starts the way a musician counts along: each note says where
@@ -485,12 +487,55 @@ function countNotes(notes: Detected[]) {
   return { onsets, anchors, tempo, played: Boolean(pulse) };
 }
 
-const counts = new WeakMap<Detected[], ReturnType<typeof countNotes>>();
+// Steps of a bar that fit the note starts best: 12 sixteenths for 3/4 and 6/8, 16 for 4/4
+function stepsPerBar(places: number[]) {
+  const fit = (steps: number) => places.filter(p => {
+    const at = p * steps;
+    return Math.abs(at - Math.round(at)) <= BAR_FIT;
+  }).length;
+  return fit(THREE_BAR) > fit(FOUR_BAR) ? THREE_BAR : FOUR_BAR;
+}
+
+// With bar lines from the video there is nothing to guess: each note lies at its share of its bar.
+// A bar shorter than the others (a bar of 3/8 in 6/8) keeps its full length and ends in a rest.
+function countOnBars(notes: Detected[], bars: number[]) {
+  const onsets = [...new Set(notes.map(n => n.start))].sort((a, b) => a - b);
+  const lengths = bars.slice(1).map((t, i) => t - bars[i]);
+  // A bar's own length, unless it is a short one: then the bars around it tell the pace
+  const usual = (k: number) => {
+    const near = lengths.slice(Math.max(0, k - 3), k + 4).filter((_, i) => i + Math.max(0, k - 3) !== k);
+    const around = near.length ? [...near].sort((a, b) => a - b)[near.length >> 1] : lengths[k];
+    return Math.abs(lengths[k] / around - 1) <= SHORT_BAR ? lengths[k] : around;
+  };
+  // Which bar a time lies in, and where in it, beyond the lines as well
+  const where = (t: number) => {
+    if (t < bars[0]) {
+      const k = -Math.ceil((bars[0] - t) / lengths[0]);
+      return { k, share: (t - bars[0] - k * lengths[0]) / lengths[0] };
+    }
+    let k = 0;
+    while (k + 1 < bars.length && bars[k + 1] <= t) k++;
+    return { k, share: (t - bars[k]) / usual(Math.min(k, lengths.length - 1)) };
+  };
+  const places = onsets.map(where);
+  const steps = stepsPerBar(places.map(p => p.share));
+  // Rounded first: a note just before a line belongs to the bar that line starts
+  const at = places.map(p => p.k * steps + Math.round(p.share * steps));
+  const first = Math.floor(Math.min(...at) / steps) * steps;
+  const anchors = at.map(a => a - first);
+  const bar = [...lengths].sort((a, b) => a - b)[lengths.length >> 1];
+  const bpm = ((steps / 4) * 60) / bar;
+  const meter: Meter = steps === FOUR_BAR ? '4/4' : bpm >= SIX_EIGHT_FROM ? '6/8' : '3/4';
+  return { onsets, anchors, tempo: { bpm, start: bpm, sure: true }, played: false, meter };
+}
+
+const counts = new WeakMap<Detected[], ReturnType<typeof countNotes> & { meter?: Meter }>();
 
 // From detected notes to a written piece. `octave` and `tempoFactor` are the corrections from the
 // import page: an octave for short keyboards, and half or double when the beat was misjudged.
-export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter, lag = 0 }: { octave?: number; tempoFactor?: number; meter?: Meter; lag?: number } = {}): Reading {
-  const count = counts.get(notes) ?? countNotes(notes);
+// `bars`: when each bar starts, where the video draws bar lines.
+export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, meter, lag = 0, bars: lines }: { octave?: number; tempoFactor?: number; meter?: Meter; lag?: number; bars?: number[] | null } = {}): Reading {
+  const count: ReturnType<typeof countNotes> & { meter?: Meter } = counts.get(notes) ?? (lines && notes.length ? countOnBars(notes, lines) : countNotes(notes));
   counts.set(notes, count);
   const { onsets, anchors, tempo, played } = count;
   const bpm = tempo.bpm * tempoFactor;
@@ -522,7 +567,7 @@ export function writeDown(notes: Detected[], { octave = 0, tempoFactor = 1, mete
     };
   });
 
-  const bars = findBars(placed, bpm);
+  const bars = count.meter ? { meter: count.meter, place: 0 } : findBars(placed, bpm);
   const { beats, beatValue, ticksPerBar } = meterOf(meter ?? bars.meter);
   const moments = [...new Set(placed.map(n => `${n.tick}|${n.hand}`))].map(id => {
     const [tick, hand] = id.split('|');

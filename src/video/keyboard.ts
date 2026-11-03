@@ -162,9 +162,12 @@ export function findKeyboard(frame: Frame): KeyMap | null {
   if (black[0] < LOWEST || black[black.length - 1] > HIGHEST) return null;
 
   const { slope, offset } = fitLine(black.map((midi, i) => ({ u: keyPosition(midi), x: best.centres[i] })));
+  // Black keys don't sit where an even keyboard would put them, and bars are drawn over the keys:
+  // where one was seen, that place counts
+  const seen = new Map(black.map((midi, i) => [midi, best.centres[i]]));
   const keys: KeyMap['keys'] = [];
   for (let midi = LOWEST; midi <= HIGHEST; midi++) {
-    const x = offset + slope * (keyPosition(midi) + (isBlack(midi) ? 0 : 0.5));
+    const x = seen.get(midi) ?? offset + slope * (keyPosition(midi) + (isBlack(midi) ? 0 : 0.5));
     if (x >= 0 && x < frame.width) keys.push({ midi, x });
   }
   // Three key widths above the keys: bars look the same everywhere, but landing notes flash and

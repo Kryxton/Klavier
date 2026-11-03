@@ -28,7 +28,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
   const [progress, setProgress] = useState<number | null>(null);
   const [stage, setStage] = useState<Stage>('keys');
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ notes: Detected[]; hearing: Hearing | null; samples: Float32Array | null; fullKeyboard: boolean } | null>(null);
+  const [result, setResult] = useState<{ notes: Detected[]; hearing: Hearing | null; samples: Float32Array | null; fullKeyboard: boolean; bars: number[] | null } | null>(null);
   const [title, setTitle] = useState('');
   const [octave, setOctave] = useState(0);
   const [tempoFactor, setTempoFactor] = useState(1);
@@ -37,7 +37,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
   const running = useRef<AbortController | null>(null);
 
   const reading = useMemo(
-    () => (result ? writeDown(result.notes, { octave, tempoFactor, meter, lag: result.hearing?.lag }) : null),
+    () => (result ? writeDown(result.notes, { octave, tempoFactor, meter, lag: result.hearing?.lag, bars: result.bars }) : null),
     [result, octave, tempoFactor, meter],
   );
 

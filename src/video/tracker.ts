@@ -61,7 +61,7 @@ function usualColour(frames: Uint8Array[], place: number, counts: Uint16Array) {
 }
 
 // Hue as an angle, null for colours too grey to have one
-function hueOf([r, g, b]: number[]) {
+export function hueOf([r, g, b]: number[]) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   if (max - min < 40) return null;
@@ -93,11 +93,11 @@ function twoHues(hues: number[]) {
   return { a, b };
 }
 
-type Coloured = Omit<Detected, 'hand'> & { hue: number | null };
+export type Coloured = Omit<Detected, 'hand'> & { hue: number | null };
 
 // Which hand a note belongs to: by colour where the video has two, else by height. `others` are
 // notes that don't decide but should come out the same way.
-function assignHands(notes: Coloured[], others: Coloured[] = []): Detected[][] {
+export function assignHands(notes: Coloured[], others: Coloured[] = []): Detected[][] {
   const everything = [...notes, ...others];
   const hues = notes.flatMap(n => (n.hue === null ? [] : [n.hue]));
   const { a, b } = hues.length < 2 ? { a: 0, b: 0 } : twoHues(hues);

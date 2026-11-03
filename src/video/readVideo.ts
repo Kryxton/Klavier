@@ -1,5 +1,6 @@
 import { findKeyboard, type KeyMap } from './keyboard';
 import { judge, soundOf } from './sound';
+import { STAGE_EVERY, StageReader } from './stage';
 import { Tracker, type Detected } from './tracker';
 
 const MAX_WIDTH = 960; // enough to tell the keys apart, and much faster than full size
@@ -173,6 +174,10 @@ async function read(file: File, progress: Progress, signal?: AbortSignal) {
     // the time between two pictures is never seen
     const { canvas, ctx, scale } = canvasFor(video, 2);
     const tracker = new Tracker(map);
+    // The whole stage now and then: where the video draws bar lines, it places every note exactly
+    const look = canvasFor(video, map.scanY);
+    const stage = new StageReader(map);
+    let looked = -Infinity;
     const read = (time: number) => {
       [map.scanY, map.keyRow].forEach((y, row) => {
         ctx.drawImage(video, 0, y / scale, video.videoWidth, 1 / scale, 0, row, canvas.width, 1);
@@ -180,6 +185,11 @@ async function read(file: File, progress: Progress, signal?: AbortSignal) {
       const { data, width } = ctx.getImageData(0, 0, canvas.width, 2);
       const row = (y: number) => ({ data: data.subarray(y * width * 4, (y + 1) * width * 4), width, height: 1 });
       tracker.add(row(0), time, row(1));
+      if (time - looked >= STAGE_EVERY) {
+        looked = time;
+        look.ctx.drawImage(video, 0, 0, video.videoWidth, map.scanY / scale, 0, 0, look.canvas.width, map.scanY);
+        stage.add(look.ctx.getImageData(0, 0, look.canvas.width, map.scanY), time);
+      }
     };
 
     const seen = [0];
@@ -211,7 +221,8 @@ async function read(file: File, progress: Progress, signal?: AbortSignal) {
         progress(SCOUT_SHARE + PLAY_SHARE + HOLE_SHARE * Math.min(1, done / missing), 'bars');
       }
     }
-    const notes: Detected[] = tracker.finish();
+    const staged = stage.finish();
+    const notes: Detected[] = staged?.notes ?? tracker.finish();
     if (!notes.length) throw new VideoError('Die Klaviatur ist da, aber ich habe keine Balken darüber erkannt.');
 
     // The sound is the second opinion; without one the picture stands alone
@@ -219,11 +230,11 @@ async function read(file: File, progress: Progress, signal?: AbortSignal) {
     progress(soundFrom, 'sound');
     const samples = await soundOf(file);
     stoppedIf(signal);
-    const checked = samples && await judge(notes, tracker.doubtful, samples, share => {
+    const checked = samples && await judge(notes, staged ? [] : tracker.doubtful, samples, share => {
       stoppedIf(signal);
       progress(soundFrom + (1 - soundFrom) * share, 'sound');
     });
-    return { notes: checked?.notes ?? notes, hearing: checked?.hearing ?? null, samples, fullKeyboard: map.fullKeyboard };
+    return { notes: checked?.notes ?? notes, hearing: checked?.hearing ?? null, samples, fullKeyboard: map.fullKeyboard, bars: staged?.bars ?? null };
   } finally {
     close(video);
   }
