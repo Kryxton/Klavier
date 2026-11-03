@@ -106,7 +106,22 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   - `keyboard.ts`: finds the keys from the 2-3 pattern of the black keys (88 keys: octave certain;
     fewer: guessed, the import page corrects it). The top edge is found straight up from the black
     keys, because hands hide their lower part. `scanY` = 3 key widths above: right over the keys
-    landing notes flash and glow.
+    landing notes flash and glow. Black keys stand where they were seen, not where an even keyboard
+    puts them: in the landscape video F sharp lay 2.5 px off, and bars are drawn over the real keys.
+  - `stage.ts` + `barLines.ts`: **where the video draws bar lines, the whole stage decides.** About
+    8 looks a second (`STAGE_EVERY`) at everything between the top and `scanY`: faint lines across
+    the stage (median of 9 columns) and the bars in each key's lane. Each note is placed between the
+    lines of the same picture, so uneven picture times and few pictures don't matter: on the landscape
+    recording all 1617 notes in the right place, still 1614 with every 20th picture (2.6 a second),
+    where the row had fallen to 4/4 at 87 BPM already at 7. Speed from each line's path over all the
+    time it is seen (from look to look alone it came out 1.8 % slow). A note is where bottoms gather,
+    each top belongs to the nearest bottom below it: two notes on one key with a 9 ms gap run together
+    in some pictures and must not join. Lanes need the edges of a bar lit and something lit around its
+    middle (letters darken the middle), a black lane with both white neighbours lit is a second, a dark
+    letter across a dim bar is bridged while the lane doesn't fall to the stage (`BODY`). Without a
+    line for 3 s it stops looking for bars (49 ms a look on Cinnamon Girl's smoke, 3 ms without).
+    No steady lines = null, and the row reading goes on as before. `readVideo` runs both; the
+    row's result isn't asked for where the stage found lines.
   - `tracker.ts`: follows whole bars through the row, the key comes from the bar's middle (exact
     to a pixel or two; widths change with glow). Background = most frequent colour per pixel.
     Two looks: the first learns how bright a solid bar is here (black and white keys apart), the
@@ -148,7 +163,12 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
     one. That tells 12 from 16 sixteenths by far (8.9 against 3.5 times chance, 12.3 against 4) and
     where bars start. 3/4 or 6/8 can't be told from the notes, so it goes by tempo, and the import
     page lets the user choose. The tempo may drift: Cinnamon Girl goes from 1.0 s to about 0.9 s
-    per beat, so 64 BPM and 41 bars are right for it.
+    per beat, so 64 BPM and 41 bars are right for it. **With bar lines** (`writeDown(…, { bars })`,
+    `countOnBars`) nothing is guessed: each note at its share of its own bar (tempo from bar to bar,
+    the landscape piece slows from 130 to 120 at bar 147), 12 or 16 sixteenths by which fits the
+    starts, a bar much shorter than those around it (bar 151 has 3 eighths) keeps its full length
+    and ends in a rest, because a piece has one time signature. Rounded before the bar is chosen: a
+    note 20 ms before a line belongs to the bar the line starts.
   - `sound.ts`: **the picture proposes, the sound decides.** `soundOf` decodes the file's sound
     (no sound or unreadable = null, then the picture stands alone). `judge` finds the delay between
     bar and sound (0.36 s here), learns what each key sounds like from where the picture says it is
@@ -239,6 +259,20 @@ bars on some black keys, 130 BPM, 1600 notes). Any change to the tracker must be
 results differ from run to run, so a fix has to hold on all of them. `--jedes=2` or `=3` drops
 pictures, as a slow device does, and `--liste` names the holes. On the second recording the note
 names written in the bars show what is true: `ffmpeg` a crop of the bar and look.
+**The truth for the landscape recording** (`Solas`, 6/8 at 130, 159 bars, 1617 notes; the user's
+first typed version said 4/4 and was wrong): `scripts/wahrheit-aus-video/` reads every picture at full
+size with numpy (about 15 min, geometry measured by hand for this video), places every note between
+the bar lines of its picture and writes `.messung/<name>/noten.json`. `node scripts/wahrheit.mjs
+grossformat2 [--zeile] [--jedes=n] [--liste]` compares the reading with it note by note (place in
+the bar, written length; every bar whole, as the page writes them). `grossformat2` and `cinnamon4`
+carry `stage.json`, what the stage reading saw in Chrome; the older captures have rows only.
+`--jedes` thins the looks as the page would (a look in a picture at least `STAGE_EVERY` after the
+last), not every n-th look. `scripts/buehne-probe.mjs` runs the stage reading on a video file with
+ffmpeg pictures, for quick tries. The capture needs a freshly started dev server (a changed file is
+loaded twice, and the hooks miss); in Chrome the keyboard was found every time, a failed capture
+was always something else. Remaining differences are lengths: one voice per hand cuts held notes.
+Cinnamon Girl captured a fourth time (`cinnamon4`) gives 69 % bass changes on the one instead of 81,
+with the code on main as well: runs differ more than three runs showed.
 **To find missing notes without an original,** read a second row higher up: the same bars pass it
 later, so what only one row sees is a mistake (the second recording: 1590 of 1612 agree). Rows saved
 from real Chrome replay the tracker in seconds instead of minutes.
@@ -254,7 +288,8 @@ score is drawn, it stands still.
   sixteenths, rolled octaves. The sound isn't used for timing yet (its long look is too blurred).
   Bars and pitches are checked on two recordings only. Needs the user's ear, then more recordings.
 - Not tried in Safari on iPhone/iPad at all: neither the frame rate nor `decodeAudioData` on these
-  files. Reading takes about the length of the video, plus 5 to 30 s for the sound. Only checked
+  files. The stage reading reads a whole stage (960 × scanY) 8 times a second: 3 ms on a PC, not
+  measured on a phone. Reading takes about the length of the video, plus 5 to 30 s for the sound. Only checked
   with a throttled CPU in Chrome: falling notes 60 fps, score while playing 47.
 - Cloud sync (same Supabase project, own table, SQL file the user runs).
 - Getting the video in: the user records the tutorial and uploads the file (decided 2026-10-31).
@@ -266,14 +301,18 @@ score is drawn, it stands still.
   (`hands` has one list per hand; 60 of 218 long notes in Cinnamon Girl sound on while the hand plays
   on and get cut; touches types, score, Sheet, edit, rhythm, so last and alone). 2. Decoding with
   WebCodecs instead of playing (every picture, same result each run; needs an MP4 demuxer, HEVC is
-  reported as supported in Chrome, Safari unknown). 3. Tidier note values in played music.
+  reported as supported in Chrome, Safari unknown; for videos with bar lines no longer needed, the
+  stage reading doesn't care about the picture rate). 3. Tidier note values in played music.
 - The switch „Original“, the brown notes, cancelling and the live site were checked up to commit
   903de64 on the branch `vergleich`; the beat chain with its place in the bar came after that and
   is checked by the yardstick and tests, not yet with both recordings on the live address.
 - A machine-made piece that suddenly changes tempo by 20 % loses the one grid and the played count
   follows too slowly: the test `follows a machine-made piece into a new tempo` is skipped for that.
-- At 11 pictures a second the tempo reading of machine-made pieces still fails (19 are fine).
-  `ENOUGH` slows the video down well before that.
+- At 11 pictures a second the tempo reading of machine-made pieces without bar lines still fails (19
+  are fine). `ENOUGH` slows the video down well before that. With bar lines it holds at 2.6.
+- The stage reading is made for dark stages with solid bars (`LIT`, `BODY` are absolute levels).
+  Only one video with bar lines is known; a light background or beat lines between the bar lines
+  would need a look.
 - Opening Notenblatt or Üben with a long piece still fills the visible lines one to a frame during
   the cross-fade (about 15 frames a second at 4x, fine on a PC). Drawing them before the fade made
   the tap wait 150 ms on a PC and was dropped.
