@@ -86,7 +86,7 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   Colours are in the `@theme static` block: Tailwind drops tokens no class uses, and `addColorStop`
   throws on an empty string. Dragging moves the notes with the finger (down = onward), holds the
   music and picks it up on letting go; a tap does nothing.
-- Pages: `Pieces` (home, list, backup file, „Aussehen“), `Import` (video to piece), `Write` = „Notenblatt“: the
+- Pages: `Pieces` (home, list, backup file), `Import` (video to piece), `Write` = „Notenblatt“: the
   score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord; the
   button with note symbols shows what „Teilen“ makes of the note, on the last note it copies),
   „Takte“ = `components/BarTools.tsx`: tap the first and last bar, choose the hands, copy to where
@@ -173,7 +173,11 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   again on start. Failure shows a banner.
 - `components/ui.tsx`: shared pieces, use them. Colors only through the tokens in `index.css`.
   Look: a dark shell with the score on paper as the bright centre. Two looks (`utils/look.ts`,
-  switch „Aussehen“ at the bottom of „Stücke“, localStorage `klavier_look`, sets `theme-color`):
+  localStorage `klavier_look`, sets `theme-color`). The switch is hidden on purpose (the user asked,
+  a visible row at the end of a long list was in the way): the lozenge in the gilded rule under
+  „Stücke“ and under „Klavier“ in the sidebar (`components/LookRule.tsx`) follows a drag to the
+  right; let go past `FAR` (60 px, less on a short rule) and the look changes, it always springs
+  back. `role="switch"`, Enter/Space toggle, 44 px hit area, `touch-action: pan-y`. The looks:
   **Barock** (default, the `@theme` values) = warm black like a church at night, gilding as the
   accent, crimson velvet as the second tone, parchment paper with sepia ink; **Melancholie**
   (`:root[data-look="melancholie"]`) = black with a dusk violet undertone, polished silver, dusk

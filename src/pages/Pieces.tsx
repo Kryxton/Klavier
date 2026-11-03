@@ -1,9 +1,9 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { ChevronRight, FilePlus2, Trash2, Video } from 'lucide-react';
-import { Choice, ICON_BUTTON, LABEL } from '../components/ui';
+import { LookRule } from '../components/LookRule';
+import { ICON_BUTTON, LABEL } from '../components/ui';
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
-import { LOOKS, useLook } from '../utils/look';
 import { KEY_CHOICES } from '../utils/notes';
 import { barCount } from '../utils/score';
 import { exportPieces, importPieces } from '../utils/storage';
@@ -16,7 +16,6 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
   const [message, setMessage] = useState('');
   const [dragging, setDragging] = useState(false);
   const file = useRef<HTMLInputElement>(null);
-  const [look, setLook] = useLook();
 
   const backup = () => {
     const link = document.createElement('a');
@@ -51,7 +50,7 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
     <div className="h-full overflow-y-auto">
       <div className="appear mx-auto w-full max-w-2xl px-4 pt-6 pb-10 md:px-8 md:pt-12">
         <h1 className="font-display text-[36px] leading-tight font-semibold md:text-[44px]"><span className="sheen-text">Stücke</span></h1>
-        <div aria-hidden className="ornament mt-3" />
+        <LookRule className="-mt-2 -mb-5" />
 
         <button
           type="button"
@@ -112,11 +111,6 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
           <input ref={file} type="file" accept="application/json,.json" className="hidden" onChange={e => { void restore(e.target.files?.[0]); e.target.value = ''; }} />
         </div>
         {message && <p className={cn(LABEL, 'mt-1')}>{message}</p>}
-
-        <div className="mt-4 flex items-center justify-between gap-6 border-t border-line pt-4">
-          <span className="text-[14px] text-dim">Aussehen</span>
-          <Choice items={LOOKS} value={look} onChange={setLook} className="min-w-0 flex-1 sm:max-w-56" />
-        </div>
       </div>
     </div>
   );

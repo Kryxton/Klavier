@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { FileMusic, ListMusic, Play } from 'lucide-react';
+import { LookRule } from './components/LookRule';
 import { Empty } from './components/ui';
 import { Import } from './pages/Import';
 import { Pieces } from './pages/Pieces';
@@ -105,7 +106,7 @@ export default function App() {
     <div className="h-dvh flex flex-col-reverse pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] lg:flex-row bg-ink text-text">
       <nav className="shrink-0 border-t border-line bg-nav pb-[env(safe-area-inset-bottom)] lg:w-56 lg:border-t-0 lg:border-r lg:p-3 lg:pb-3">
         <p className="hidden px-3 pt-2 pb-3 lg:block"><span className="sheen-text font-display text-[24px] font-semibold">Klavier</span></p>
-        <div aria-hidden className="hidden px-3 pb-4 lg:block"><div className="ornament" /></div>
+        <div className="hidden px-3 pb-1 lg:block"><LookRule className="-mt-5 -mb-2" /></div>
         <div className="relative grid grid-cols-3 lg:grid-cols-1">
           <div
             aria-hidden

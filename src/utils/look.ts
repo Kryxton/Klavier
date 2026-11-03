@@ -1,17 +1,12 @@
-import { useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 // The two looks of the app; the colours are in index.css, Barock is the default (no attribute)
 export type Look = 'barock' | 'melancholie';
-export const LOOKS: { id: Look; label: string }[] = [
-  { id: 'barock', label: 'Barock' },
-  { id: 'melancholie', label: 'Melancholie' },
-];
 const KEY = 'klavier_look';
 
 export function loadLook(): Look {
   try {
-    const saved = localStorage.getItem(KEY);
-    return LOOKS.some(look => look.id === saved) ? (saved as Look) : 'barock';
+    return localStorage.getItem(KEY) === 'melancholie' ? 'melancholie' : 'barock';
   } catch {
     return 'barock';
   }
@@ -26,16 +21,31 @@ export function applyLook(look: Look) {
   if (nav) document.querySelector('meta[name="theme-color"]')?.setAttribute('content', nav);
 }
 
-export function useLook() {
-  const [look, setLook] = useState(loadLook);
-  const choose = (next: Look) => {
-    setLook(next);
-    applyLook(next);
-    try {
-      localStorage.setItem(KEY, next);
-    } catch {
-      // Not saved: the look holds until the page is opened again
-    }
+// One look for every switch on the screen (the rule under „Stücke“ and the one in the sidebar)
+let current: Look | null = null;
+const listeners = new Set<() => void>();
+const subscribe = (notify: () => void) => {
+  listeners.add(notify);
+  return () => {
+    listeners.delete(notify);
   };
-  return [look, choose] as const;
+};
+const read = () => (current ??= loadLook());
+
+export function setLook(next: Look) {
+  current = next;
+  applyLook(next);
+  try {
+    localStorage.setItem(KEY, next);
+  } catch {
+    // Not saved: the look holds until the page is opened again
+  }
+  listeners.forEach(notify => notify());
 }
+
+export const useLook = () => useSyncExternalStore(subscribe, read);
+
+// For tests: forget what was read, as a fresh start would
+export const resetLook = () => {
+  current = null;
+};

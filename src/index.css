@@ -369,21 +369,21 @@ input[type="number"]::-webkit-outer-spin-button {
   background-image: var(--sheen-paper);
 }
 
-/* A fine double rule with a small lozenge, under the big titles only */
+/* A fine double rule under the big titles; its lozenge is the hidden switch of the look
+   (components/LookRule.tsx), the ring in the colour of the shell cuts it out of the rule */
 .ornament {
-  position: relative;
   height: 4px;
   border-top: 1px solid var(--color-trim);
   border-bottom: 1px solid var(--color-trim);
 }
-.ornament::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
+.lozenge {
+  display: block;
   width: 7px;
   height: 7px;
   background-image: var(--sheen-accent);
-  transform: translate(-50%, -50%) rotate(45deg);
   box-shadow: 0 0 0 3px var(--color-ink);
+  transition: transform 200ms var(--ease-out-soft), box-shadow 200ms ease;
+}
+[data-armed] > .lozenge {
+  box-shadow: 0 0 0 3px var(--color-ink), 0 0 12px 2px var(--color-accent);
 }
