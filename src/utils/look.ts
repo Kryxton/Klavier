@@ -32,6 +32,7 @@ const subscribe = (notify: () => void) => {
 };
 const read = () => (current ??= loadLook());
 
+// The colours glide from one look to the other by themselves (index.css)
 export function setLook(next: Look) {
   current = next;
   applyLook(next);

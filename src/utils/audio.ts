@@ -75,8 +75,11 @@ function click(when: number, strong: boolean) {
   source.start(when, 0, buffer.duration, CLICK_LEVEL);
 }
 
-// Browsers allow sound only after a tap: call this from the tap itself
+// Browsers allow sound only after a tap: call this from the tap itself. Safari mutes web sound with
+// the iPhone's silent switch unless the page says it plays music, as a music app does.
 export function unlockAudio() {
+  const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  if (session && session.type !== 'playback') session.type = 'playback';
   void Tone.start();
   loadSamples();
 }

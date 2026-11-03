@@ -1,7 +1,6 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { cn } from '../utils/cn';
 import { setLook, useLook } from '../utils/look';
-import { smoothly } from '../utils/smooth';
 
 const FAR = 60; // px to the right that switch the look on letting go (less on a short rule)
 
@@ -19,7 +18,7 @@ export function LookRule({ className }: { className?: string }) {
     return width > 0 ? width / 2 - 8 : Infinity;
   };
   const far = () => Math.min(FAR, room() * 0.6);
-  const toggle = () => smoothly(() => setLook(look === 'barock' ? 'melancholie' : 'barock'));
+  const toggle = () => setLook(look === 'barock' ? 'melancholie' : 'barock');
 
   const down = (e: PointerEvent<HTMLDivElement>) => {
     start.current = e.clientX;

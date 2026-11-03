@@ -10,7 +10,6 @@ import type { Piece } from './types';
 import { cn } from './utils/cn';
 import { newPiece } from './utils/edit';
 import { deleteRecording, saveRecording } from './utils/recordings';
-import { smoothly } from './utils/smooth';
 import { loadLibrary, mergePieces, saveLibrary, type Library } from './utils/storage';
 import { useUpdateAvailable } from './utils/update';
 import { RATE } from './video/sound';
@@ -27,7 +26,7 @@ export default function App() {
   const [library, setLibrary] = useState<Library>(loadLibrary);
   const [page, showPage] = useState<Page>(() => (loadLibrary().openId ? 'write' : 'pieces'));
   const [dropped, setDropped] = useState<File | null>(null);
-  const setPage = (next: Page) => smoothly(() => showPage(next));
+  const setPage = showPage;
   const [saved, setSaved] = useState(true);
   const [steps, setSteps] = useState<{ past: Piece[]; future: Piece[] }>({ past: [], future: [] });
   const libraryNow = useRef(library);
@@ -142,7 +141,9 @@ export default function App() {
             Speichern im Browser hat nicht geklappt. Lade unter „Stücke“ ein Backup herunter.
           </p>
         )}
-        <main className="min-h-0 flex-1">
+        {/* Only the page fades in, the navigation stays put. A cross-fade of the whole screen
+            (view transitions) jerked sideways on the iPhone and froze everything while it ran. */}
+        <main key={page} className="page-in min-h-0 flex-1">
           {page === 'pieces' && (
             <Pieces
               pieces={library.pieces} openId={library.openId} onOpen={open} onCreate={create} onDelete={remove}

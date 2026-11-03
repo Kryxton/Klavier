@@ -56,7 +56,9 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   is already playing. `audio.ts` = Tone (Salamander samples, synth until they have arrived).
   **Samples play through `ToneBufferSource`, not `Tone.Sampler`:** the Sampler can't take back a
   release it was given, so held notes went on sounding after a pause. All notes of a run go through
-  one bus and `silence` drops it, which also reaches notes only planned so far. `usePlayer.ts` = the
+  one bus and `silence` drops it, which also reaches notes only planned so far. `unlockAudio` sets
+  `navigator.audioSession.type = 'playback'`: Safari mutes web sound with the iPhone's silent switch
+  otherwise (it played over Bluetooth, not the speaker), music apps play anyway. `usePlayer.ts` = the
   React side.
 - `utils/pedal.ts`: the pedal, for the ear only (`withPedal` changes what the player hears, the
   score, the falling notes and the highlights keep the written notes). `harmonies` finds the best
@@ -212,8 +214,13 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   (`font-display`, upright, sentence case), everything else system font, real note symbols for
   lengths (`NoteIcons.tsx`). Text contrast ≥ 4.5:1 in both looks; a new token needs a value in both. `Choice` =
   segmented control with a sliding thumb. Navigation is one element: bottom bar, from `lg` a sidebar
-  (upright iPads keep the width for the score). Pages cross-fade (`utils/smooth.ts`), tools slide
-  up. **Motion is set in one place:** `--time-quick/fade/move/spring` and the two eases in
+  (upright iPads keep the width for the score). A page fades in under the navigation (`.page-in`
+  on `main`, keyed by page); **no view transitions:** the snapshot cross-fade of the whole screen
+  jerked sideways on the iPhone and froze everything while it ran, so the lozenge couldn't spring
+  back. A new look glides by itself: the colour tokens are registered with `@property` and
+  `:root` transitions them (`--time-look`), 60 fps, 30 to 40 at 4x throttling; a transition on
+  every element gave 17. Not registered: `--color-nav` (the browser bar reads it at once) and the
+  falling notes' colours (their canvas reads them once). Tools slide up. **Motion is set in one place:** `--time-quick/fade/move/spring` and the two eases in
   `index.css`; reduced motion sets the times to 0 and `glide()` scrolls without gliding. Only
   transform and opacity move. The shell is `overflow-hidden`: tools sliding in made it scrollable
   for a moment, and on a laptop the scrollbar narrowed the score, which drew all its lines twice.
