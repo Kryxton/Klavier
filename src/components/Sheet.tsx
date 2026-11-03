@@ -401,11 +401,11 @@ export function Sheet({ piece, selected, active, doubts, follow, onSelect, bars,
       </div>
       {boxes.map(box => (
         <Fragment key={box.index}>
-          <span className="pointer-events-none absolute text-[11px] tabular-nums text-dim" style={{ left: box.left + 2, top: box.top + (STAFF_TOP - 16) * scale - 4 }}>{box.index + 1}</span>
+          <span className="pointer-events-none absolute text-[11px] tabular-nums text-paper-dim" style={{ left: box.left + 2, top: box.top + (STAFF_TOP - 16) * scale - 4 }}>{box.index + 1}</span>
           {bars && box.index >= bars.from && box.index <= bars.to && (
             <div
               data-testid="marked-bar"
-              className="pointer-events-none absolute bg-accent/15"
+              className="pointer-events-none absolute bg-mark/15"
               style={{
                 left: box.left, width: box.width,
                 top: box.top + (STAFF_TOP + (bars.hands === 'left' ? STAFF_GAP : 0)) * scale,

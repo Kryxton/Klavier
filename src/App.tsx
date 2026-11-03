@@ -103,14 +103,15 @@ export default function App() {
 
   return (
     <div className="h-dvh flex flex-col-reverse pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] lg:flex-row bg-ink text-text">
-      <nav className="shrink-0 border-t border-line bg-card pb-[env(safe-area-inset-bottom)] lg:w-56 lg:border-t-0 lg:border-r lg:p-3 lg:pb-3">
-        <p className="hidden px-3 pt-2 pb-4 text-[20px] font-bold tracking-tight lg:block">Klavier</p>
+      <nav className="shrink-0 border-t border-line bg-nav pb-[env(safe-area-inset-bottom)] lg:w-56 lg:border-t-0 lg:border-r lg:p-3 lg:pb-3">
+        <p className="hidden px-3 pt-2 pb-3 lg:block"><span className="sheen-text font-display text-[24px] font-semibold">Klavier</span></p>
+        <div aria-hidden className="hidden px-3 pb-4 lg:block"><div className="ornament" /></div>
         <div className="relative grid grid-cols-3 lg:grid-cols-1">
           <div
             aria-hidden
             style={{ '--tab': activeTab, transition: 'transform 300ms var(--ease-out-soft)' } as CSSProperties}
-            className="absolute left-0 top-0 h-0.5 w-1/3 rounded-full bg-accent [transform:translateX(calc(var(--tab)*100%))] lg:h-11 lg:w-full lg:rounded-xl lg:bg-accent-soft lg:[transform:translateY(calc(var(--tab)*100%))]"
-          />
+            className="absolute left-0 top-0 flex h-0.5 w-1/3 justify-center [transform:translateX(calc(var(--tab)*100%))] lg:h-11 lg:w-full lg:rounded-control lg:bg-track lg:shadow-thumb lg:[transform:translateY(calc(var(--tab)*100%))]"
+          ><span className="sheen h-full w-8 rounded-full bg-accent lg:hidden" /></div>
           {NAV.map(({ id, label, icon: Icon }) => {
             const on = activeTab === NAV.findIndex(item => item.id === id);
             return (
@@ -118,7 +119,7 @@ export default function App() {
                 key={id} type="button" onClick={() => setPage(id)} aria-current={on ? 'page' : undefined}
                 className={cn(
                   'relative flex h-[54px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium lg:h-11 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:text-[15px]',
-                  on ? 'text-accent' : 'text-dim',
+                  on ? 'text-text' : 'text-dim',
                 )}
               >
                 <Icon className="h-[22px] w-[22px] lg:h-5 lg:w-5" strokeWidth={on ? 2.25 : 1.75} /> {label}
@@ -129,12 +130,12 @@ export default function App() {
       </nav>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pb-[env(safe-area-inset-bottom)]">
         {update && (
-          <button type="button" onClick={() => location.reload()} className="shrink-0 bg-text px-3 py-2 text-left text-sm text-white">
+          <button type="button" onClick={() => location.reload()} className="shrink-0 bg-text px-3 py-2 text-left text-sm text-on-text">
             Neue Version da. Zum Laden tippen.
           </button>
         )}
         {!saved && (
-          <p role="alert" className="shrink-0 bg-accent px-3 py-2 text-sm text-white">
+          <p role="alert" className="shrink-0 bg-accent px-3 py-2 text-sm text-on-accent">
             Speichern im Browser hat nicht geklappt. Lade unter „Stücke“ ein Backup herunter.
           </p>
         )}

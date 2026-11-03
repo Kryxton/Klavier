@@ -1,40 +1,150 @@
 @import "tailwindcss";
 
-/* All colors of the app, so the look is one block of variables. White surfaces, piano black and
-   one accent: the red felt inside a piano. */
+/* Title fonts, in the bundle (the site allows no fonts from elsewhere). One weight each; latin-ext
+   cut down to Latin Extended-A for names like Dvořák, see the OFL files next to them. */
+@font-face {
+  font-family: "EB Garamond";
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/eb-garamond-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/eb-garamond-latin-ext-600-normal.woff2") format("woff2");
+  unicode-range: U+0100-017F, U+0218-021B, U+1E9E;
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/cormorant-garamond-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Cormorant Garamond";
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/cormorant-garamond-latin-ext-600-normal.woff2") format("woff2");
+  unicode-range: U+0100-017F, U+0218-021B, U+1E9E;
+}
+
+/* All colors of the app, so a look is one block of variables. Two looks (utils/look.ts), both a
+   dark shell with the score on paper as the bright centre. Barock is the default: a church at
+   night, warm black, gilding only where it means something, crimson velvet as the second tone. */
 @theme {
-  --color-ink: #f4f3f0;
-  --color-card: #ffffff;
-  --color-track: #e9e7e2;
-  --color-paper: #ffffff;
-  --color-line: #e4e2dc;
-  --color-text: #17181b;
-  --color-dim: #6e7076;
-  --color-accent: #c8202d;
-  --color-accent-soft: #fbe9ea;
-  --color-danger: #c8202d;
-  --color-doubt: #b9770e;
+  --color-ink: #0d0907;
+  --color-nav: #080504;
+  --color-card: #16100c;
+  --color-track: #1f1711;
+  --color-thumb: #2f2318;
+  --color-line: #2d2219;
+  --color-trim: #7d6236; /* the gilded hairline: ornament, edge of the paper, chosen segment */
+  --color-trim-dim: #3b2c1c;
+  --color-text: #f4ead7;
+  --color-dim: #b4a287;
+  --color-accent: #dcb86e;
+  --color-accent-soft: #2c2213;
+  --color-danger: #e8907f;
+  --color-on-accent: #1a1206;
+  --color-on-text: #0d0907;
+  --color-paper: #f1e3c4;
+  --color-paper-ink: #1f150c;
+  --color-paper-dim: #6a5736;
+  --color-mark: #8c1a2c; /* chosen and sounding notes on the paper */
+  --color-doubt: #7a5400;
+  --color-key-mark: #dcb86e; /* chosen keys of the keyboard under the score */
+  --color-on-key-mark: #1a1206;
+  --radius-xl: 4px;
+  --radius-2xl: 6px;
+  --radius-control: 5px;
+  --radius-thumb: 3px;
+  --shadow-sheet: 0 0 0 1px var(--color-trim), 0 0 0 5px var(--color-ink), 0 0 0 6px var(--color-trim-dim), 0 30px 70px rgb(0 0 0 / 0.6);
+  --shadow-sheet-edge: inset 0 1px 0 var(--color-trim), inset 0 -1px 0 var(--color-trim);
+  --shadow-thumb: inset 0 0 0 1px var(--color-trim);
+  --font-display: "EB Garamond", Garamond, Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* The falling notes play on the black lacquer of a piano. Static: most are read only by the
-   canvas, and Tailwind would leave out what no class uses. */
+/* The falling notes: the accent plays the right hand, the second tone the left. Static: most are
+   read only by the canvas, and Tailwind would leave out what no class uses. */
 @theme static {
-  --color-stage: #0b0c0e;
-  --color-stage-light: #17181c;
-  --color-stage-line: #24262b;
-  --color-ivory: #f6f3ec;
-  --color-ivory-dark: #cfcbc1;
-  --color-ebony: #101114;
-  --color-bar-right: #e63946;
-  --color-bar-right-dark: #a81e2a;
-  --color-bar-right-on: #ff8a8f;
-  --color-bar-left: #e8dfc9;
-  --color-bar-left-dark: #a89f8b;
-  --color-bar-left-on: #fff8e8;
-  --color-key-right: #e63946;
-  --color-key-left: #c9a35a;
+  --color-stage: #0b0806;
+  --color-stage-light: #19110c;
+  --color-stage-line: #2a1e15;
+  --color-ivory: #f3ead6;
+  --color-ivory-dark: #c9bc9d;
+  --color-ebony: #0e0b09;
+  --color-bar-right: #dcb86e;
+  --color-bar-right-dark: #98743a;
+  --color-bar-right-on: #fbe8b6;
+  --color-bar-left: #a8384b;
+  --color-bar-left-dark: #6d2231;
+  --color-bar-left-on: #ee9aa6;
+  --color-key-right: #dcb86e;
+  --color-key-left: #a8384b;
+}
+
+/* Metal as a gentle gradient, never a flat yellow: the accent where it shines (play, the active
+   tab, the video button), the big titles, and the paper slightly richer towards its edges */
+:root {
+  color-scheme: dark;
+  --sheen-accent: linear-gradient(155deg, #f7e6ad 0%, #dfbb6c 36%, #b5893a 68%, #8a6327 100%);
+  --sheen-text: linear-gradient(180deg, #f8e7b0 0%, #e0bd70 55%, #b58a3b 100%);
+  --sheen-paper: radial-gradient(130% 90% at 50% 0%, #f7ecd3 0%, #f1e3c4 55%, #e8d4ad 100%);
+}
+
+/* Melancholie: dusk with a violet undertone, deep black against polished silver, dusk violet as
+   the second tone, yellowed paper; only what sounds glows warm, like a candle */
+:root[data-look="melancholie"] {
+  --color-ink: #0b0a0f;
+  --color-nav: #07060a;
+  --color-card: #17141f;
+  --color-track: #211d2b;
+  --color-thumb: #2f2a3c;
+  --color-line: #29243a;
+  --color-trim: #7a7490;
+  --color-trim-dim: #2f2b38;
+  --color-text: #e0dce6;
+  --color-dim: #a09aab;
+  --color-accent: #eef0f5;
+  --color-accent-soft: #2d2839;
+  --color-danger: #e6a0a8;
+  --color-on-accent: #0b0a0f;
+  --color-on-text: #0b0a0f;
+  --color-paper: #ebe2cf;
+  --color-paper-ink: #24201e;
+  --color-paper-dim: #625a4b;
+  --color-mark: #5a3590;
+  --color-doubt: #775300;
+  --color-key-mark: #9a86c4;
+  --color-on-key-mark: #0b0a0f;
+  --radius-xl: 8px;
+  --radius-2xl: 10px;
+  --radius-control: 8px;
+  --radius-thumb: 6px;
+  --shadow-sheet: 0 0 0 1px var(--color-trim-dim), 0 24px 60px rgb(0 0 0 / 0.6);
+  --font-display: "Cormorant Garamond", Garamond, Georgia, serif;
+  --sheen-accent: linear-gradient(155deg, #ffffff 0%, #e4e7ee 32%, #a9adba 66%, #6f7280 100%);
+  --sheen-text: linear-gradient(180deg, #ffffff 0%, #e2e4ec 50%, #a4a7b4 100%);
+  --sheen-paper: radial-gradient(130% 90% at 50% 0%, #f0e8d6 0%, #ebe2cf 55%, #dfd3b9 100%);
+  --color-stage: #0a090d;
+  --color-stage-light: #15131b;
+  --color-stage-line: #24212c;
+  --color-ivory: #ece5d6;
+  --color-ivory-dark: #bdb4a1;
+  --color-ebony: #0b0a0f;
+  --color-bar-right: #d9dce3;
+  --color-bar-right-dark: #8b8f9b;
+  --color-bar-right-on: #f7dfb4;
+  --color-bar-left: #8f78b8;
+  --color-bar-left-dark: #5b4a7a;
+  --color-bar-left-on: #f7dfb4;
+  --color-key-right: #d9dce3;
+  --color-key-left: #8f78b8;
 }
 
 html {
@@ -232,6 +342,48 @@ input[type="number"]::-webkit-outer-spin-button {
 .sheet .note-selected *,
 .sheet .note-playing,
 .sheet .note-playing * {
-  fill: var(--color-accent);
-  stroke: var(--color-accent);
+  fill: var(--color-mark);
+  stroke: var(--color-mark);
+}
+
+/* The ink of the score; low specificity, so chosen and sounding notes still win */
+.sheet :where(svg [fill]:not([fill="none"])) {
+  fill: var(--color-paper-ink);
+}
+.sheet :where(svg [stroke]:not([stroke="none"])) {
+  stroke: var(--color-paper-ink);
+}
+
+/* Metal and paper (see :root) */
+.sheen {
+  background-image: var(--sheen-accent);
+}
+.sheen-text {
+  background-image: var(--sheen-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.paper {
+  background-color: var(--color-paper);
+  background-image: var(--sheen-paper);
+}
+
+/* A fine double rule with a small lozenge, under the big titles only */
+.ornament {
+  position: relative;
+  height: 4px;
+  border-top: 1px solid var(--color-trim);
+  border-bottom: 1px solid var(--color-trim);
+}
+.ornament::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  background-image: var(--sheen-accent);
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: 0 0 0 3px var(--color-ink);
 }

@@ -51,13 +51,13 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
         data-key={midi}
         className={cn(
           'absolute top-0 flex items-end justify-center select-none',
-          black ? 'z-10 h-[62%] rounded-b-[3px] bg-text' : 'h-full rounded-b-[3px] border-r border-line bg-card',
+          black ? 'z-10 h-[62%] rounded-b-[3px] bg-ebony' : 'h-full rounded-b-[3px] border-r border-ivory-dark bg-ivory',
           'transition-colors duration-150',
-          (on || sounding) && 'bg-accent',
+          (on || sounding) && 'bg-key-mark',
         )}
         style={{ left: `${box.left * 100}%`, width: `${box.width * 100}%` }}
       >
-        {showName && <span className={cn('pb-1.5 text-[10px] leading-none pointer-events-none', on ? 'text-white' : 'text-dim')}>{name}</span>}
+        {showName && <span className={cn('pb-1.5 text-[10px] leading-none pointer-events-none', on ? 'text-on-key-mark' : 'text-paper-dim')}>{name}</span>}
       </button>
     );
   };
@@ -68,7 +68,7 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
     </div>
   );
 
-  if (fit) return <div className={cn('shrink-0 bg-card', className)}>{board}</div>;
+  if (fit) return <div className={cn('shrink-0 bg-ivory', className)}>{board}</div>;
 
   return (
     <div className={cn('relative shrink-0 flex bg-track', className)}>

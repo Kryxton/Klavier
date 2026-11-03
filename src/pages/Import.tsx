@@ -73,7 +73,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
     const lit = new Set(Array.from({ length: high - 20 }, (_, i) => 21 + i));
     return (
       <Screen>
-        <h1 className="text-[28px] font-bold tracking-tight">{STAGES[stage]}</h1>
+        <h1 className="font-display text-[30px] font-semibold">{STAGES[stage]}</h1>
         <p className="mt-2 text-dim">Das dauert etwa so lange wie das Video. Lass die Seite dabei sichtbar: In einem anderen Tab wartet das Lesen.</p>
         <div className="mt-8 overflow-hidden rounded-xl border border-line bg-card">
           <Keyboard fit active={lit} className="h-24" />
@@ -88,8 +88,8 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
     const bars = Math.ceil(Math.max(handTicks(reading.piece.hands.right), handTicks(reading.piece.hands.left)) / barTicks(reading.piece));
     return (
       <Screen>
-        <span className="pop flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white"><Check className="h-7 w-7" strokeWidth={2.5} /></span>
-        <h1 className="mt-4 text-[28px] font-bold tracking-tight">Fertig gelesen</h1>
+        <span className="pop flex h-14 w-14 items-center justify-center rounded-full bg-accent text-on-accent"><Check className="h-7 w-7" strokeWidth={2.5} /></span>
+        <h1 className="mt-4 font-display text-[30px] font-semibold">Fertig gelesen</h1>
 
         <label className={cn(LABEL, 'mt-6 block')}>Titel
           <span className="mt-1 block text-[17px]">
@@ -149,7 +149,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
 
   return (
     <Screen>
-      <h1 className="text-[28px] font-bold tracking-tight">Video auswählen</h1>
+      <h1 className="font-display text-[30px] font-semibold">Video auswählen</h1>
       <p className="mt-2 text-dim">
         Nimm das Tutorial per Bildschirmaufnahme auf und wähle die Datei hier aus. Alle Tasten sollten zu sehen sein. Das Video bleibt auf deinem Gerät.
       </p>

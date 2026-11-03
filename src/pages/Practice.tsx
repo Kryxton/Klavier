@@ -95,7 +95,7 @@ export function Practice({ piece }: { piece: Piece }) {
   return (
     <div className="h-full flex flex-col">
       <header className="shrink-0 flex items-center gap-3 px-4 py-2 md:px-6">
-        <h1 className="flex-1 min-w-0 truncate text-[17px] font-bold tracking-tight md:text-[20px]">{piece.title || 'Ohne Titel'}</h1>
+        <h1 className="flex-1 min-w-0 truncate font-display text-[20px] font-semibold md:text-[24px]">{piece.title || 'Ohne Titel'}</h1>
         <Choice items={VIEWS} value={view} onChange={stopPicking} className="w-40 shrink-0" />
       </header>
 
@@ -106,7 +106,7 @@ export function Practice({ piece }: { piece: Piece }) {
           </div>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-auto md:px-6 md:pb-4">
+        <div className="flex-1 min-h-0 overflow-auto md:px-6 md:pt-2 md:pb-4">
           <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
             <Sheet piece={piece} active={active.events} follow={[...active.events][0]} bars={marked} onBar={tapBar} />
           </div>
@@ -116,7 +116,7 @@ export function Practice({ piece }: { piece: Piece }) {
       <div className="shrink-0 px-3 py-2">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-3 gap-y-2">
           {hint && <p className="w-full text-center text-[13px] text-dim">{hint}</p>}
-          <button type="button" aria-label={running ? 'Anhalten' : 'Abspielen'} onClick={() => (running ? pause() : play())} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+          <button type="button" aria-label={running ? 'Anhalten' : 'Abspielen'} onClick={() => (running ? pause() : play())} className="flex h-12 w-12 shrink-0 items-center justify-center sheen rounded-full bg-accent text-on-accent">
             {running ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="ml-0.5 h-5 w-5" fill="currentColor" />}
           </button>
           <button type="button" aria-label="Zum Anfang" onClick={() => player.seek(loop?.from ?? 0)} className={ICON_BUTTON}>

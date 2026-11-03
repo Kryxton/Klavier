@@ -1,8 +1,9 @@
 import { useRef, useState, type DragEvent } from 'react';
-import { ChevronRight, FilePlus2, Music, Trash2, Video } from 'lucide-react';
-import { ICON_BUTTON, LABEL, TEXT_BUTTON } from '../components/ui';
+import { ChevronRight, FilePlus2, Trash2, Video } from 'lucide-react';
+import { Choice, ICON_BUTTON, LABEL } from '../components/ui';
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
+import { LOOKS, useLook } from '../utils/look';
 import { KEY_CHOICES } from '../utils/notes';
 import { barCount } from '../utils/score';
 import { exportPieces, importPieces } from '../utils/storage';
@@ -15,6 +16,7 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
   const [message, setMessage] = useState('');
   const [dragging, setDragging] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const [look, setLook] = useLook();
 
   const backup = () => {
     const link = document.createElement('a');
@@ -47,52 +49,56 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="appear mx-auto w-full max-w-4xl px-4 py-6 md:px-8 md:py-10">
-        <h1 className="text-[32px] font-bold tracking-tight">Stücke</h1>
+      <div className="appear mx-auto w-full max-w-2xl px-4 pt-6 pb-10 md:px-8 md:pt-12">
+        <h1 className="font-display text-[36px] leading-tight font-semibold md:text-[44px]"><span className="sheen-text">Stücke</span></h1>
+        <div aria-hidden className="ornament mt-3" />
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-[2fr_1fr]">
-          <button
-            type="button"
-            onClick={onVideo}
-            onDragOver={e => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={drop}
-            className={cn(
-              'flex items-center gap-4 rounded-2xl bg-accent p-5 text-left text-white',
-              dragging && 'ring-4 ring-accent/30',
-            )}
-          >
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15"><Video className="h-6 w-6" /></span>
-            <span className="min-w-0">
-              <span className="block text-[17px] font-semibold">Video in Noten umwandeln</span>
-              <span className="block text-sm text-white/80">Aufnahme eines Tutorials auswählen</span>
-            </span>
-          </button>
-          <button type="button" onClick={onCreate} className="flex items-center gap-4 rounded-2xl bg-card p-5 text-left">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-track"><FilePlus2 className="h-5 w-5" /></span>
-            <span className="text-[17px] font-semibold">Leeres Notenblatt</span>
+        <button
+          type="button"
+          onClick={onVideo}
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={drop}
+          className={cn(
+            'mt-5 flex w-full items-center gap-4 rounded-2xl border border-line bg-card px-4 py-4 text-left',
+            dragging && 'border-accent',
+          )}
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center sheen rounded-full bg-accent text-on-accent"><Video className="h-5 w-5" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[16px] font-semibold">Video in Noten umwandeln</span>
+            <span className="block text-[13px] text-dim">Aufnahme eines Tutorials wählen oder hierher ziehen</span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-dim" />
+        </button>
+
+        <div className="mt-9 flex items-baseline justify-between">
+          <h2 className="text-[13px] font-semibold text-dim">Deine Stücke</h2>
+          <button type="button" onClick={onCreate} className="flex items-center gap-1.5 text-[14px] font-medium text-text">
+            <FilePlus2 className="h-4 w-4" /> Leeres Notenblatt
           </button>
         </div>
 
         {sorted.length > 0 && (
-          <ul className="mt-6 grid gap-3 md:grid-cols-2" aria-label="Deine Stücke">
+          <ul className="mt-2 border-t border-line" aria-label="Deine Stücke">
             {sorted.map(piece => (
-              <li key={piece.id} className={cn('flex items-center rounded-2xl bg-card', piece.id === openId && 'ring-1 ring-accent/40')}>
-                <button type="button" onClick={() => onOpen(piece.id)} className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent"><Music className="h-5 w-5" /></span>
+              <li key={piece.id} className="flex items-center border-b border-line">
+                <button type="button" onClick={() => onOpen(piece.id)} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 text-left active:scale-100">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[16px] font-semibold">{piece.title || 'Ohne Titel'}</span>
-                    <span className={cn(LABEL, 'block')}>{barCount(piece)} Takte · {keyLabel(piece.key)}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="truncate font-display text-[19px] leading-snug font-semibold">{piece.title || 'Ohne Titel'}</span>
+                      {piece.id === openId && <span aria-label="geöffnet" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+                    </span>
+                    <span className={cn(LABEL, 'block tabular-nums')}>{barCount(piece)} Takte · {keyLabel(piece.key)} · {piece.beats}/{piece.beatValue}</span>
                   </span>
-                  {confirming !== piece.id && <ChevronRight className="h-4 w-4 shrink-0 text-dim" />}
                 </button>
                 {confirming === piece.id ? (
-                  <button type="button" onClick={() => { onDelete(piece.id); setConfirming(null); }} className="shrink-0 px-3 py-3 text-sm font-medium text-danger">
+                  <button type="button" onClick={() => { onDelete(piece.id); setConfirming(null); }} className="shrink-0 px-2 py-3 text-sm font-medium text-danger">
                     Wirklich löschen
                   </button>
                 ) : (
-                  <button type="button" aria-label={`${piece.title} löschen`} onClick={() => setConfirming(piece.id)} className={cn(ICON_BUTTON, 'mr-1 text-dim')}>
-                    <Trash2 className="h-4 w-4" />
+                  <button type="button" aria-label={`${piece.title} löschen`} onClick={() => setConfirming(piece.id)} className={cn(ICON_BUTTON, '-mr-2 text-dim')}>
+                    <Trash2 className="h-4 w-4" strokeWidth={1.75} />
                   </button>
                 )}
               </li>
@@ -100,12 +106,17 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
           </ul>
         )}
 
-        <div className="mt-6 flex flex-wrap gap-x-3">
-          <button type="button" onClick={backup} disabled={!pieces.length} className={TEXT_BUTTON}>Backup sichern</button>
-          <button type="button" onClick={() => file.current?.click()} className={TEXT_BUTTON}>Backup laden</button>
+        <div className="mt-8 flex flex-wrap gap-x-5 text-[14px] text-dim">
+          <button type="button" onClick={backup} disabled={!pieces.length} className="min-h-11 disabled:opacity-30">Backup sichern</button>
+          <button type="button" onClick={() => file.current?.click()} className="min-h-11">Backup laden</button>
           <input ref={file} type="file" accept="application/json,.json" className="hidden" onChange={e => { void restore(e.target.files?.[0]); e.target.value = ''; }} />
         </div>
-        {message && <p className={cn(LABEL, 'mt-1 px-2')}>{message}</p>}
+        {message && <p className={cn(LABEL, 'mt-1')}>{message}</p>}
+
+        <div className="mt-4 flex items-center justify-between gap-6 border-t border-line pt-4">
+          <span className="text-[14px] text-dim">Aussehen</span>
+          <Choice items={LOOKS} value={look} onChange={setLook} className="min-w-0 flex-1 sm:max-w-56" />
+        </div>
       </div>
     </div>
   );

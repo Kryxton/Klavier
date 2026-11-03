@@ -191,12 +191,12 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="shrink-0 flex items-center gap-1 px-4 py-2 md:px-6 text-[17px] md:text-[20px]">
+      <header className="shrink-0 flex items-center gap-1 px-4 py-2 md:px-6 text-[20px] md:text-[24px]">
         <input
           aria-label="Titel"
           value={piece.title}
           onChange={e => change(current => ({ ...current, title: e.target.value }))}
-          className="flex-1 min-w-0 bg-transparent font-bold tracking-tight text-text outline-none"
+          className="flex-1 min-w-0 bg-transparent font-display font-semibold text-text outline-none"
         />
         {tools && (
           <>
@@ -248,7 +248,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
         </div>
       )}
 
-      <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto md:px-6 md:pb-4">
+      <div data-testid="sheet-box" className="flex-1 min-h-0 overflow-auto md:px-6 md:pt-2 md:pb-4">
         <div className={cn(SHEET, 'appear mx-auto max-w-5xl px-1 py-3 sm:px-6 sm:py-6')}>
           <Sheet piece={piece} selected={selected} doubts={tools ? doubts : undefined} follow={follow} onSelect={select} bars={barTool.marked} onBar={barTool.on ? barTool.tap : undefined} />
         </div>
@@ -318,7 +318,7 @@ export function Write({ piece, change, undo, redo, canUndo, canRedo }: {
                   {chord.size > 1 ? `Akkord (${chord.size}) eintragen` : 'Eintragen'}
                 </button>
                 <Toggle on={instant} onClick={() => { setInstant(!instant); setChord(new Set()); }} className="min-h-10">Sofort</Toggle>
-                <button type="button" onClick={() => write([])} className="min-h-10 rounded-[11px] bg-track px-3 text-[13px] font-medium text-dim">Pause</button>
+                <button type="button" onClick={() => write([])} className="min-h-10 rounded-control bg-track px-3 text-[13px] font-medium text-dim">Pause</button>
                 <button type="button" aria-label="Letzte Note entfernen" disabled={!piece.hands[hand].length} onClick={() => change(c => removeLast(c, hand))} className={ICON_BUTTON}>
                   <Trash2 {...ICON} />
                 </button>
