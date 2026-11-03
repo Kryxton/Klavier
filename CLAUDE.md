@@ -70,9 +70,13 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   Both hands go through one `Formatter`, so notes that sound together
   stand above each other. **Long pieces are drawn line by line:** every line is its own SVG, made
   when it nears the screen (`IntersectionObserver`), one to a frame, so 119 bars open in 90 ms instead
-  of blocking 500 and an edit redraws only those. Bar widths are estimated (`roomOf`, on the wide
+  of blocking 500. An edit redraws only lines whose `lineKey` (everything a line is drawn from, as
+  text) changed, and those on the screen at once in a layout effect: before, every edit left the
+  visible lines blank for 4 to 6 pictures. Bar widths are estimated (`roomOf`, on the wide
   side), because asking VexFlow means building every note first. Ties over line ends are drawn as
-  half ties from each side. Selected and sounding notes switch a class on just those notes. A tap
+  half ties from each side. Selected and sounding notes switch a class on just those notes; only
+  selection fades (`.sheet-soft`, not while playing): a fill transition on every part of every
+  sounding note repainted the lines in each frame (35 instead of 60 frames a second). A tap
   goes to the nearest note within `TAP_RADIUS`, because noteheads are small. `PrintSheet` is the
   score for paper: its own layout for A4 whatever the screen is, drawn whole and at once when it
   appears, because a browser prints what is there at that moment. It stays after printing (not
@@ -189,7 +193,11 @@ down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size,
   lengths (`NoteIcons.tsx`). Text contrast ≥ 4.5:1 in both looks; a new token needs a value in both. `Choice` =
   segmented control with a sliding thumb. Navigation is one element: bottom bar, from `lg` a sidebar
   (upright iPads keep the width for the score). Pages cross-fade (`utils/smooth.ts`), tools slide
-  up. Inputs get their size from the parent (the iOS rule `max(16px, 1em)` beats `text-*` on them).
+  up. **Motion is set in one place:** `--time-quick/fade/move/spring` and the two eases in
+  `index.css`; reduced motion sets the times to 0 and `glide()` scrolls without gliding. Only
+  transform and opacity move. The shell is `overflow-hidden`: tools sliding in made it scrollable
+  for a moment, and on a laptop the scrollbar narrowed the score, which drew all its lines twice.
+  Inputs get their size from the parent (the iOS rule `max(16px, 1em)` beats `text-*` on them).
 
 ## Checking in the browser
 Sound and VexFlow are mocked in `App.test.tsx`, so tests don't prove them; check in real Chrome.
@@ -235,6 +243,11 @@ names written in the bars show what is true: `ffmpeg` a crop of the bar and look
 later, so what only one row sees is a mistake (the second recording: 1590 of 1612 agree). Rows saved
 from real Chrome replay the tracker in seconds instead of minutes.
 **Speed:** check with a long piece and `Emulation.setCPUThrottlingRate` 4; a PC hides everything.
+Frame times: a `requestAnimationFrame` probe in the page plus `PerformanceObserver` for `longtask`
+and `layout-shift`; a trace (`Tracing.start`, category `devtools.timeline`) says where the time
+goes. The machine is shared with other sessions: compare old and new builds in turns, several
+rounds, medians. The view-transition fade is not safe from the main thread: while a line of the
+score is drawn, it stands still.
 
 ## Open
 - **For played music note lengths and some starts are still guesses:** chords falling apart into
@@ -261,4 +274,7 @@ from real Chrome replay the tracker in seconds instead of minutes.
   follows too slowly: the test `follows a machine-made piece into a new tempo` is skipped for that.
 - At 11 pictures a second the tempo reading of machine-made pieces still fails (19 are fine).
   `ENOUGH` slows the video down well before that.
+- Opening Notenblatt or Üben with a long piece still fills the visible lines one to a frame during
+  the cross-fade (about 15 frames a second at 4x, fine on a PC). Drawing them before the fade made
+  the tap wait 150 ms on a PC and was dropped.
 - Not yet: slurs, dynamics, repeat signs, keyboard shortcuts on the PC, a pedal written in the score.
