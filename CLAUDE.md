@@ -13,6 +13,10 @@ watch are an extra, never the focus. Only for the user, with cloud sync still to
 Design (user, 2026-10-31): clear and tidy above all, smooth and satisfying to use, must look like
 no AI made it (the black-gold version with spaced capitals and serif italics was rejected, tabs
 especially), and work on phone, iPad and laptop.
+2026-11-03 the user chose two looks to switch between: Barock (default) and Melancholie. Liked:
+music apps in the dark, the feel of sheet music on paper, "as high quality as a baroque church".
+Black and gold weren't the problem, the careless execution was: no letter-spaced capitals, no
+italics everywhere, gold only as a fine accent, never as an area.
 
 ## Hosting
 - Live on Vercel: https://klavier-phi.vercel.app (push to `main` = live, the repo was connected
@@ -26,6 +30,9 @@ especially), and work on phone, iPad and laptop.
 ## Stack (same as Latein, no Supabase yet)
 React 19 + TypeScript + Vite (single file) + Tailwind 4, lucide-react, Vitest. VexFlow 4 for the
 score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, `npm run build`.
+Title fonts EB Garamond and Cormorant Garamond (600 only) lie in `src/assets/fonts` and are inlined
+into the single file (the CSP allows no fonts from elsewhere): latin as Google cuts it, latin-ext cut
+down to Latin Extended-A, about 70 kB together. New weights or glyphs cost size, keep it at that.
 
 ## Code map
 - `src/types.ts`: `Piece` with `hands.right/left`, each a list of `Ev` (keys = MIDI numbers, empty =
@@ -79,7 +86,7 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
   Colours are in the `@theme static` block: Tailwind drops tokens no class uses, and `addColorStop`
   throws on an empty string. Dragging moves the notes with the finger (down = onward), holds the
   music and picks it up on letting go; a tap does nothing.
-- Pages: `Pieces` (home, list, backup file), `Import` (video to piece), `Write` = „Notenblatt“: the
+- Pages: `Pieces` (home, list, backup file, „Aussehen“), `Import` (video to piece), `Write` = „Notenblatt“: the
   score; „Korrigieren“ or tapping a note brings the tools and keys (keys toggle the chord; the
   button with note symbols shows what „Teilen“ makes of the note, on the last note it copies),
   „Takte“ = `components/BarTools.tsx`: tap the first and last bar, choose the hands, copy to where
@@ -165,8 +172,17 @@ score (4, not 5: 5 loads its fonts differently), Tone.js for sound. `npm test`, 
 - `utils/storage.ts`: everything in localStorage `klavier_pieces`, saved on every change, opened
   again on start. Failure shows a banner.
 - `components/ui.tsx`: shared pieces, use them. Colors only through the tokens in `index.css`.
-  Look: white surfaces on warm grey, piano black, one accent: the red felt of a piano (Apple Music
-  feel). System font, sentence case, real note symbols for lengths (`NoteIcons.tsx`). `Choice` =
+  Look: a dark shell with the score on paper as the bright centre. Two looks (`utils/look.ts`,
+  switch „Aussehen“ at the bottom of „Stücke“, localStorage `klavier_look`, sets `theme-color`):
+  **Barock** (default, the `@theme` values) = warm black like a church at night, gilding as the
+  accent, crimson velvet as the second tone, parchment paper with sepia ink; **Melancholie**
+  (`:root[data-look="melancholie"]`) = black with a dusk violet undertone, polished silver, dusk
+  violet, yellowed paper, sounding notes glow candle-warm. The accent colours the right hand of the
+  falling notes, the second tone the left. Metal is a gentle gradient (`.sheen`, `.sheen-text`),
+  only on play, the active tab, the video button and the big titles; `trim` is the gilded hairline
+  (`.ornament` under the big titles, the edge of the paper, the chosen segment). Serif titles
+  (`font-display`, upright, sentence case), everything else system font, real note symbols for
+  lengths (`NoteIcons.tsx`). Text contrast ≥ 4.5:1 in both looks; a new token needs a value in both. `Choice` =
   segmented control with a sliding thumb. Navigation is one element: bottom bar, from `lg` a sidebar
   (upright iPads keep the width for the score). Pages cross-fade (`utils/smooth.ts`), tools slide
   up. Inputs get their size from the parent (the iOS rule `max(16px, 1em)` beats `text-*` on them).
