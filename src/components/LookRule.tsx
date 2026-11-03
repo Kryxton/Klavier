@@ -69,7 +69,7 @@ export function LookRule({ className }: { className?: string }) {
         className="absolute top-0 left-1/2 -ml-[22px] flex h-11 w-11 cursor-grab touch-pan-y items-center justify-center rounded-full outline-none select-none focus-visible:ring-1 focus-visible:ring-trim active:cursor-grabbing"
         style={{
           transform: `translateX(${shift}px)`,
-          transition: held ? 'none' : 'transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transition: held ? 'none' : 'transform var(--time-spring) var(--ease-spring)',
         }}
       >
         <span

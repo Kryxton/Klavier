@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Hands } from '../types';
+import { useLook } from '../utils/look';
 import { HIGHEST, LOWEST, isBlack, keyBox } from '../utils/notes';
 import type { Player } from '../utils/player';
 import { soundsBetween, type Sound } from '../utils/score';
@@ -109,6 +110,7 @@ export function Falling({ player, sounds, ticksPerBar, hands, onGrab, onDrop }: 
   player: Player; sounds: Sound[]; ticksPerBar: number; hands: Hands; onGrab: () => void; onDrop: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const look = useLook(); // the colours are the look's, read once for each
 
   useEffect(() => {
     const element = canvas.current;
@@ -236,7 +238,7 @@ export function Falling({ player, sounds, ticksPerBar, hands, onGrab, onDrop }: 
       element.removeEventListener('pointerup', release);
       element.removeEventListener('pointercancel', release);
     };
-  }, [player, sounds, ticksPerBar, hands, onGrab, onDrop]);
+  }, [player, sounds, ticksPerBar, hands, onGrab, onDrop, look]);
 
   return <canvas ref={canvas} data-testid="falling" className="block w-full h-full cursor-grab touch-none active:cursor-grabbing" />;
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { HIGHEST, LOWEST, MIDDLE_C, isBlack, keyBox, label } from '../utils/notes';
 import { cn } from '../utils/cn';
+import { glide } from '../utils/smooth';
 
 const KEY_WIDTH = 36; // px per white key where the keyboard scrolls
 const OCTAVE = KEY_WIDTH * 7;
@@ -28,10 +29,10 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
     const box = scroller.current;
     if (!box || fit || reveal === undefined) return;
     const x = keyBox(reveal, low, high).left * whites * KEY_WIDTH;
-    box.scrollTo({ left: x - box.clientWidth / 2, behavior: 'smooth' });
+    box.scrollTo({ left: x - box.clientWidth / 2, behavior: glide() });
   }, [fit, reveal, low, high, whites]);
 
-  const scrollBy = (step: number) => scroller.current?.scrollBy({ left: step, behavior: 'smooth' });
+  const scrollBy = (step: number) => scroller.current?.scrollBy({ left: step, behavior: glide() });
 
   const draw = (midi: number) => {
     const box = keyBox(midi, low, high);
@@ -52,7 +53,7 @@ export function Keyboard({ low = LOWEST, high = HIGHEST, fit, marked, active, re
         className={cn(
           'absolute top-0 flex items-end justify-center select-none',
           black ? 'z-10 h-[62%] rounded-b-[3px] bg-ebony' : 'h-full rounded-b-[3px] border-r border-ivory-dark bg-ivory',
-          'transition-colors duration-150',
+          'transition-colors duration-(--time-quick)',
           (on || sounding) && 'bg-key-mark',
         )}
         style={{ left: `${box.left * 100}%`, width: `${box.width * 100}%` }}

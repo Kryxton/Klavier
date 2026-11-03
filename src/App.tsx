@@ -103,14 +103,16 @@ export default function App() {
   const activeTab = Math.max(0, NAV.findIndex(item => item.id === page));
 
   return (
-    <div className="h-dvh flex flex-col-reverse pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] lg:flex-row bg-ink text-text">
+    // Only the pages scroll, never the shell: tools sliding in from below would make it scrollable
+    // for a moment, and on a laptop the scrollbar that came and went made the score draw again
+    <div className="h-dvh overflow-hidden flex flex-col-reverse pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] lg:flex-row bg-ink text-text">
       <nav className="shrink-0 border-t border-line bg-nav pb-[env(safe-area-inset-bottom)] lg:w-56 lg:border-t-0 lg:border-r lg:p-3 lg:pb-3">
         <p className="hidden px-3 pt-2 pb-3 lg:block"><span className="sheen-text font-display text-[24px] font-semibold">Klavier</span></p>
         <div className="hidden px-3 pb-1 lg:block"><LookRule className="-mt-5 -mb-2" /></div>
         <div className="relative grid grid-cols-3 lg:grid-cols-1">
           <div
             aria-hidden
-            style={{ '--tab': activeTab, transition: 'transform 300ms var(--ease-out-soft)' } as CSSProperties}
+            style={{ '--tab': activeTab, transition: 'transform var(--time-move) var(--ease-out-soft)' } as CSSProperties}
             className="absolute left-0 top-0 flex h-0.5 w-1/3 justify-center [transform:translateX(calc(var(--tab)*100%))] lg:h-11 lg:w-full lg:rounded-control lg:bg-track lg:shadow-thumb lg:[transform:translateY(calc(var(--tab)*100%))]"
           ><span className="sheen h-full w-8 rounded-full bg-accent lg:hidden" /></div>
           {NAV.map(({ id, label, icon: Icon }, index) => {
