@@ -4,6 +4,7 @@ import { LookRule } from '../components/LookRule';
 import { ICON_BUTTON, LABEL } from '../components/ui';
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
+import { titleOf } from '../utils/edit';
 import { KEY_CHOICES } from '../utils/notes';
 import { barCount } from '../utils/score';
 import { exportPieces, importPieces } from '../utils/storage';
@@ -85,7 +86,7 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
                 <button type="button" onClick={() => onOpen(piece.id)} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 text-left active:scale-100">
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="truncate font-display text-[19px] leading-snug font-semibold">{piece.title || 'Ohne Titel'}</span>
+                      <span className="truncate font-display text-[19px] leading-snug font-semibold">{titleOf(piece)}</span>
                       {piece.id === openId && <span aria-label="geöffnet" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
                     </span>
                     <span className={cn(LABEL, 'block tabular-nums')}>{barCount(piece)} Takte · {keyLabel(piece.key)} · {piece.beats}/{piece.beatValue}</span>
@@ -96,7 +97,7 @@ export function Pieces({ pieces, openId, onOpen, onVideo, onDropVideo, onCreate,
                     Wirklich löschen
                   </button>
                 ) : (
-                  <button type="button" aria-label={`${piece.title} löschen`} onClick={() => setConfirming(piece.id)} className={cn(ICON_BUTTON, '-mr-2 text-dim')}>
+                  <button type="button" aria-label={`${titleOf(piece)} löschen`} onClick={() => setConfirming(piece.id)} className={cn(ICON_BUTTON, '-mr-2 text-dim')}>
                     <Trash2 className="h-4 w-4" strokeWidth={1.75} />
                   </button>
                 )}

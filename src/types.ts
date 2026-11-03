@@ -1,4 +1,5 @@
 export type Hand = 'right' | 'left';
+export type Hands = Hand | 'both'; // one hand or both, to play or to copy
 export type Duration = 'w' | 'h' | 'q' | '8' | '16' | '32';
 export type Accidental = '#' | 'b';
 

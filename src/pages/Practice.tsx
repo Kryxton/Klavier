@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Metronome, Pause, Play, Repeat, SkipBack } from 'lucide-react';
 import { Falling } from '../components/Falling';
 import { Sheet } from '../components/Sheet';
-import { Choice, Empty, ICON_BUTTON, SHEET, Toggle } from '../components/ui';
-import type { Piece } from '../types';
+import { Choice, Empty, HAND_CHOICES, ICON_BUTTON, SHEET, Toggle } from '../components/ui';
+import type { Hands, Piece } from '../types';
 import { cn } from '../utils/cn';
-import type { Bars } from '../utils/edit';
+import { titleOf, type Bars } from '../utils/edit';
 import { barCount, barTicks } from '../utils/score';
-import { usePlayer, type HandChoice } from '../utils/usePlayer';
+import { usePlayer } from '../utils/usePlayer';
 import { useScreenAwake } from '../utils/wakeLock';
 import { useRecording } from '../utils/useRecording';
 
@@ -16,15 +16,10 @@ const VIEWS: { id: View; label: string }[] = [
   { id: 'sheet', label: 'Noten' },
   { id: 'falling', label: 'Fallend' },
 ];
-const HANDS: { id: HandChoice; label: string }[] = [
-  { id: 'both', label: 'Beide' },
-  { id: 'right', label: 'Rechts' },
-  { id: 'left', label: 'Links' },
-];
 
 export function Practice({ piece }: { piece: Piece }) {
   const [view, setView] = useState<View>('sheet');
-  const [hands, setHands] = useState<HandChoice>('both');
+  const [hands, setHands] = useState<Hands>('both');
   const [speed, setSpeed] = useState(100);
   const [pedal, setPedal] = useState(false);
   const [countIn, setCountIn] = useState(false);
@@ -95,7 +90,7 @@ export function Practice({ piece }: { piece: Piece }) {
   return (
     <div className="h-full flex flex-col">
       <header className="shrink-0 flex items-center gap-3 px-4 py-2 md:px-6">
-        <h1 className="flex-1 min-w-0 truncate font-display text-[20px] font-semibold md:text-[24px]">{piece.title || 'Ohne Titel'}</h1>
+        <h1 className="flex-1 min-w-0 truncate font-display text-[20px] font-semibold md:text-[24px]">{titleOf(piece)}</h1>
         <Choice items={VIEWS} value={view} onChange={stopPicking} className="w-40 shrink-0" />
       </header>
 
@@ -132,7 +127,7 @@ export function Practice({ piece }: { piece: Piece }) {
             />
           </label>
           <div className="flex w-full items-center gap-2 lg:w-auto">
-            <Choice items={HANDS} value={hands} onChange={setHands} className="flex-1 min-w-0 lg:w-56 lg:flex-none" />
+            <Choice items={HAND_CHOICES} value={hands} onChange={setHands} className="flex-1 min-w-0 lg:w-56 lg:flex-none" />
             {recording && <Toggle on={original} onClick={() => setOriginal(!original)} className="shrink-0 px-3">Original</Toggle>}
             {!original && <Toggle on={pedal} onClick={() => setPedal(!pedal)} className="shrink-0 px-3">Pedal</Toggle>}
             <Toggle on={countIn} label="Vorzähler" onClick={() => setCountIn(!countIn)} className="w-9 shrink-0 px-0">

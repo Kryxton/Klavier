@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { createPortal } from 'react-dom';
 import { Accidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, StaveTie, Voice } from 'vexflow';
 import type { Hand, Piece } from '../types';
-import type { Bars } from '../utils/edit';
+import { titleOf, type Bars } from '../utils/edit';
 import { keyName, keySignature, signFor, spell } from '../utils/notes';
 import { paginate } from '../utils/print';
 import { barTicks, toBars, type Printed } from '../utils/score';
@@ -33,7 +33,7 @@ interface Bar {
   left: Printed[];
   need: number;
 }
-export interface DrawnNote {
+interface DrawnNote {
   hand: Hand;
   id: string;
   el: SVGElement;
@@ -445,8 +445,8 @@ export function PrintSheet({ piece }: { piece: Piece }) {
       {sheets.map(({ lines, gap }, i) => (
         <section key={i} className="print-sheet">
           {i === 0
-            ? <header style={{ minHeight: TITLE_ROOM }}><h1>{piece.title || 'Ohne Titel'}</h1><p>♩ = {piece.bpm}</p></header>
-            : <header className="print-running" style={{ height: HEADER_ROOM }}>{piece.title || 'Ohne Titel'} · Seite {i + 1} von {sheets.length}</header>}
+            ? <header style={{ minHeight: TITLE_ROOM }}><h1>{titleOf(piece)}</h1><p>♩ = {piece.bpm}</p></header>
+            : <header className="print-running" style={{ height: HEADER_ROOM }}>{titleOf(piece)} · Seite {i + 1} von {sheets.length}</header>}
           {lines.map((line, n) => <div key={line} data-line={line} className="print-line" style={{ height: page.lines[line].height * PAPER_SCALE, marginTop: n ? gap : 0 }} />)}
         </section>
       ))}

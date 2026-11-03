@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Hand, Piece } from '../types';
+import type { Hands, Piece } from '../types';
 import { audioClock, unlockAudio } from './audio';
 import { harmonies, harmonyBeat, withPedal } from './pedal';
 import { Player, type Loop, type Recording } from './player';
-import { soundsBetween, timeline } from './score';
-
-export type HandChoice = Hand | 'both';
+import { WHOLE, soundsBetween, timeline } from './score';
 
 const TIMER_MS = 40;
 
@@ -14,7 +12,7 @@ const TIMER_MS = 40;
 // draws from the position itself sets `followNotes` to false and saves all those redraws. The
 // pedal changes only what is heard: the notes stay as written for everything that shows them.
 export function usePlayer(piece: Piece, { hands, speed, loop, pedal, countIn, followNotes, recording }: {
-  hands: HandChoice; speed: number; loop: Loop | null; pedal: boolean; countIn: boolean; followNotes: boolean; recording: Recording | null;
+  hands: Hands; speed: number; loop: Loop | null; pedal: boolean; countIn: boolean; followNotes: boolean; recording: Recording | null;
 }) {
   const player = useRef<Player | null>(null);
   player.current ??= new Player(audioClock);
@@ -65,7 +63,7 @@ export function usePlayer(piece: Piece, { hands, speed, loop, pedal, countIn, fo
   // From a tick, or from where it stands; `tick` while playing means a jump
   const play = useCallback((tick?: number) => {
     unlockAudio();
-    current.start(tick, countIn ? { beats, ticks: 192 / beatValue } : undefined);
+    current.start(tick, countIn ? { beats, ticks: WHOLE / beatValue } : undefined);
     setRunning(true);
   }, [current, countIn, beats, beatValue]);
 

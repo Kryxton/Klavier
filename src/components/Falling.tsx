@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
+import type { Hands } from '../types';
 import { HIGHEST, LOWEST, isBlack, keyBox } from '../utils/notes';
 import type { Player } from '../utils/player';
 import { soundsBetween, type Sound } from '../utils/score';
-import type { HandChoice } from '../utils/usePlayer';
 
 const WIDEST_KEY = 24; // px; a wider screen shows more keys, not bigger ones
 const BARS_SHOWN = 2.5; // how far ahead the notes can be seen
@@ -106,7 +106,7 @@ function buildGlow(colour: string) {
 // only what changed since the last picture, and only the notes in view. Dragging moves them with
 // the finger: down is onward, the way they fall.
 export function Falling({ player, sounds, ticksPerBar, hands, onGrab, onDrop }: {
-  player: Player; sounds: Sound[]; ticksPerBar: number; hands: HandChoice; onGrab: () => void; onDrop: () => void;
+  player: Player; sounds: Sound[]; ticksPerBar: number; hands: Hands; onGrab: () => void; onDrop: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 

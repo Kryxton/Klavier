@@ -1,4 +1,4 @@
-import type { Accidental, Duration, Ev, Hand, Piece } from '../types';
+import type { Accidental, Duration, Ev, Hand, Hands, Piece } from '../types';
 import { newId } from './ids';
 import { barCount, barTicks, eventTicks, halves, handTicks, splitTicks } from './score';
 
@@ -30,12 +30,14 @@ function lasting({ dur: _dur, dotted: _dotted, tie, ...ev }: Ev, ticks: number):
   });
 }
 
-export function newPiece(title = 'Neues Stück'): Piece {
+export function newPiece(title?: string): Piece {
   return {
-    id: newId('p'), title, beats: 4, beatValue: 4, key: 0, bpm: 80,
+    id: newId('p'), title: title || 'Neues Stück', beats: 4, beatValue: 4, key: 0, bpm: 80,
     hands: { right: [], left: [] }, updatedAt: new Date().toISOString(),
   };
 }
+
+export const titleOf = (piece: Pick<Piece, 'title'>) => piece.title || 'Ohne Titel';
 
 // Added at the end, or right behind the selected event
 export function addEvent(
@@ -156,7 +158,6 @@ export function insertBehind(piece: Piece, hand: Hand, id: string) {
 }
 
 // Whole bars, `to` is the last one
-export type Hands = Hand | 'both';
 export interface Bars { from: number; to: number; hands: Hands }
 
 const chosen = (hands: Hands) => (hands === 'both' ? HANDS : [hands]);

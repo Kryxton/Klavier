@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Keyboard } from '../components/Keyboard';
 import { BUTTON_RED, BUTTON_SOFT, Choice, LABEL, TEXT_BUTTON } from '../components/ui';
 import type { Piece } from '../types';
 import { cn } from '../utils/cn';
+import { HIGHEST, LOWEST } from '../utils/notes';
 import { barTicks, handTicks } from '../utils/score';
 import { VideoError, readVideo, type Stage } from '../video/readVideo';
 import { writeDown, type Meter } from '../video/rhythm';
@@ -69,8 +71,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
 
   if (progress !== null) {
     // The keys light up from left to right as the video is read
-    const high = 21 + Math.round(progress * 87);
-    const lit = new Set(Array.from({ length: high - 20 }, (_, i) => 21 + i));
+    const lit = new Set(Array.from({ length: Math.round(progress * (HIGHEST - LOWEST)) + 1 }, (_, i) => LOWEST + i));
     return (
       <Screen>
         <h1 className="font-display text-[30px] font-semibold">{STAGES[stage]}</h1>
@@ -163,7 +164,7 @@ export function Import({ first, onCreate, onCancel }: { first?: File | null; onC
   );
 }
 
-function Screen({ children }: { children: React.ReactNode }) {
+function Screen({ children }: { children: ReactNode }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="appear mx-auto w-full max-w-lg px-4 py-8 md:py-16">{children}</div>

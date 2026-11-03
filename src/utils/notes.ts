@@ -90,21 +90,19 @@ export const KEY_CHOICES: { id: number; label: string }[] = [
   { id: -7, label: 'Ces-Dur / as-Moll (7♭)' },
 ];
 
-// Position of a key on a keyboard from `low` to `high`, as a share of its width. Shared by the
-// keyboard and the falling notes, so the bars land exactly on their keys.
-const whitesBelow = (midi: number) => {
+// A key's place along the keyboard, counted in white keys from A0
+export function keyPosition(midi: number) {
   let count = 0;
   for (let m = LOWEST; m < midi; m++) if (!isBlack(m)) count++;
   return count;
-};
+}
 
-// A key's place along the keyboard, counted in white keys from A0
-export const keyPosition = whitesBelow;
-
+// Position of a key on a keyboard from `low` to `high`, as a share of its width. Shared by the
+// keyboard and the falling notes, so the bars land exactly on their keys.
 export function keyBox(midi: number, low: number, high: number) {
-  const whites = whitesBelow(high + 1) - whitesBelow(low);
+  const whites = keyPosition(high + 1) - keyPosition(low);
   const unit = 1 / whites;
-  const index = whitesBelow(midi) - whitesBelow(low);
+  const index = keyPosition(midi) - keyPosition(low);
   if (!isBlack(midi)) return { left: index * unit, width: unit };
   const width = unit * 0.62;
   return { left: index * unit - width / 2, width };

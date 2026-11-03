@@ -1,16 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import type { Piece } from '../types';
-import { endBar, insertBars, removeBars, replaceBars, type Bars, type Hands } from '../utils/edit';
+import type { Hands, Piece } from '../types';
+import { endBar, insertBars, removeBars, replaceBars, type Bars } from '../utils/edit';
 import { barTicks, eventAtBar } from '../utils/score';
-import { BUTTON, BUTTON_SOFT, Choice } from './ui';
+import { BUTTON, BUTTON_SOFT, Choice, HAND_CHOICES } from './ui';
 
 type Way = 'insert' | 'replace';
 
-const HANDS: { id: Hands; label: string }[] = [
-  { id: 'both', label: 'Beide' },
-  { id: 'right', label: 'Rechts' },
-  { id: 'left', label: 'Links' },
-];
 const WAYS: { id: Way; label: string }[] = [
   { id: 'insert', label: 'Einfügen' },
   { id: 'replace', label: 'Ersetzen' },
@@ -98,7 +93,7 @@ export function BarTools({ tool, children }: { tool: ReturnType<typeof useBarToo
   return (
     <>
       <div className="flex items-center gap-2">
-        <Choice className="flex-1 min-w-0" items={HANDS} value={hands} onChange={tool.pickHands} />
+        <Choice className="flex-1 min-w-0" items={HAND_CHOICES} value={hands} onChange={tool.pickHands} />
         {children}
       </div>
       <p className="min-h-7 text-[13px] text-dim">{named ?? 'Tippe den ersten und dann den letzten Takt.'}</p>

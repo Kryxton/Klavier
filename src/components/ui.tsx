@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import type { Hands } from '../types';
 import { cn } from '../utils/cn';
 
 // Colors only from the tokens in index.css
@@ -16,10 +17,9 @@ export function Choice<T extends string | number>({ items, value, onChange, clas
   items: readonly { id: T; label: ReactNode; name?: string }[]; value: T; onChange: (v: T) => void; className?: string;
 }) {
   const index = Math.max(0, items.findIndex(item => item.id === value));
-  const thumb: CSSProperties = { width: `${100 / items.length}%`, transform: `translateX(${index * 100}%)` };
   return (
     <div role="group" className={cn('relative grid rounded-control bg-track p-0.5', className)} style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
-      <div className="absolute inset-y-0.5 left-0.5 pr-1" style={{ ...thumb, width: `calc((100% - 4px) / ${items.length})`, transition: 'transform 260ms var(--ease-out-soft)' }} aria-hidden>
+      <div className="absolute inset-y-0.5 left-0.5 pr-1" style={{ width: `calc((100% - 4px) / ${items.length})`, transform: `translateX(${index * 100}%)`, transition: 'transform 260ms var(--ease-out-soft)' }} aria-hidden>
         <div className="h-full w-full rounded-thumb bg-thumb shadow-thumb" style={{ width: 'calc(100% + 4px)' }} />
       </div>
       {items.map(item => (
@@ -40,6 +40,13 @@ export function Choice<T extends string | number>({ items, value, onChange, clas
     </div>
   );
 }
+
+// Both hands or one: to play, or to copy bars
+export const HAND_CHOICES: { id: Hands; label: string }[] = [
+  { id: 'both', label: 'Beide' },
+  { id: 'right', label: 'Rechts' },
+  { id: 'left', label: 'Links' },
+];
 
 // A small on/off button
 export function Toggle({ on, onClick, label, children, className }: {

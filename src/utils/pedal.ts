@@ -1,5 +1,5 @@
 import type { Piece } from '../types';
-import type { Sound } from './score';
+import { WHOLE, type Sound } from './score';
 
 // Major, minor and the dominant seventh, as steps above the root. Other sevenths would swallow real
 // changes: Am7 holds both Am and C.
@@ -15,7 +15,7 @@ export interface Harmony {
 
 // The beat a harmony can change on; in 6/8 and the like three eighths make one
 export const harmonyBeat = ({ beats, beatValue }: Pick<Piece, 'beats' | 'beatValue'>) =>
-  (192 / beatValue) * (beatValue === 8 && beats % 3 === 0 ? 3 : 1);
+  (WHOLE / beatValue) * (beatValue === 8 && beats % 3 === 0 ? 3 : 1);
 
 // How long each of the twelve notes sounds in each beat
 function notesPerBeat(sounds: Sound[], beat: number) {

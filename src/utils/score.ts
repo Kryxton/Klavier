@@ -1,12 +1,13 @@
 import type { Duration, Ev, Hand, Piece } from '../types';
 
 export const PPQ = 48; // ticks per quarter note
+export const WHOLE = 4 * PPQ; // ticks per whole note: a beat of `beatValue` is WHOLE / beatValue
 
-const LENGTHS: Record<Duration, number> = { w: 192, h: 96, q: 48, '8': 24, '16': 12, '32': 6 };
+const LENGTHS: Record<Duration, number> = { w: WHOLE, h: WHOLE / 2, q: PPQ, '8': PPQ / 2, '16': PPQ / 4, '32': PPQ / 8 };
 const LONGEST_FIRST: Duration[] = ['w', 'h', 'q', '8', '16', '32'];
 
 export const eventTicks = (ev: Pick<Ev, 'dur' | 'dotted'>) => LENGTHS[ev.dur] * (ev.dotted ? 1.5 : 1);
-export const barTicks = (piece: Pick<Piece, 'beats' | 'beatValue'>) => (piece.beats * 192) / piece.beatValue;
+export const barTicks = (piece: Pick<Piece, 'beats' | 'beatValue'>) => (piece.beats * WHOLE) / piece.beatValue;
 export const handTicks = (events: Ev[]) => events.reduce((sum, ev) => sum + eventTicks(ev), 0);
 
 // Note values that add up to `ticks`, longest first

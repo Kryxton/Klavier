@@ -81,7 +81,7 @@ export default function App() {
   };
 
   const createFrom = (title: string, fields: Pick<Piece, 'beats' | 'beatValue' | 'key' | 'bpm' | 'hands' | 'source'>, samples: Float32Array | null) => {
-    const fresh = { ...newPiece(title || 'Neues Stück'), ...fields };
+    const fresh = { ...newPiece(title), ...fields };
     if (samples) void saveRecording(fresh.id, samples, RATE);
     setLibrary(old => ({ pieces: [...old.pieces, fresh], openId: fresh.id }));
     setSteps({ past: [], future: [] });
@@ -113,8 +113,8 @@ export default function App() {
             style={{ '--tab': activeTab, transition: 'transform 300ms var(--ease-out-soft)' } as CSSProperties}
             className="absolute left-0 top-0 flex h-0.5 w-1/3 justify-center [transform:translateX(calc(var(--tab)*100%))] lg:h-11 lg:w-full lg:rounded-control lg:bg-track lg:shadow-thumb lg:[transform:translateY(calc(var(--tab)*100%))]"
           ><span className="sheen h-full w-8 rounded-full bg-accent lg:hidden" /></div>
-          {NAV.map(({ id, label, icon: Icon }) => {
-            const on = activeTab === NAV.findIndex(item => item.id === id);
+          {NAV.map(({ id, label, icon: Icon }, index) => {
+            const on = index === activeTab;
             return (
               <button
                 key={id} type="button" onClick={() => setPage(id)} aria-current={on ? 'page' : undefined}
