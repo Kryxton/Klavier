@@ -32,7 +32,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const tap = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }));
+// `hidden` skips the check whether each button is visible, which made a test take 5 s instead of 1.5:
+// jsdom loads no styles, so nothing is hidden anyway
+const tap = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name, hidden: true }));
 const notes = () => loadLibrary().pieces[0].hands;
 
 function startPiece() {
